@@ -6,7 +6,7 @@ import { NotAllowedError, NotFoundError } from "./errors";
 export interface FocusedPostDoc extends BaseDoc {
   author: ObjectId;
   content: string;
-  media: string; // HERE (how to implement media?)
+  media: ObjectId;
   category: ObjectId;
 }
 
@@ -19,8 +19,6 @@ export default class FocusedPostConcept {
   public readonly posts = new DocCollection<FocusedPostDoc>("focused posts");
   public readonly categories = new DocCollection<CategoriesDoc>("focused post categories");
 
-  // HERE (how to implement media?)
-
   /**
    * Creates a new focused post
    * @param author id of poster
@@ -30,7 +28,7 @@ export default class FocusedPostConcept {
    * @returns an object containing a success message and focused post object
    * @throws NotFoundError if the category isn't found
    */
-  async create(author: ObjectId, content: string, media: string, category: ObjectId) {
+  async create(author: ObjectId, content: string, media: ObjectId, category: ObjectId) {
     await this.checkCategory(category);
     await this.verifyCategory(content, category);
     const _id = await this.posts.createOne({ author, content, media, category });
@@ -86,6 +84,14 @@ export default class FocusedPostConcept {
     await this.isAuthor(userId, _id);
     await this.posts.deleteOne({ _id });
     return { msg: "Focused post deleted successfully!" };
+  }
+
+  /**
+   * Finds all category objects
+   * @returns category objects
+   */
+  async getAllCategories() {
+    return await this.categories.readMany({});
   }
 
   /**

@@ -112,7 +112,7 @@ export default class UserConcept {
     if (update.email !== undefined) {
       await this.isEmailUnique(update.email);
     }
-    await this.users.updateOne({ _id }, update);
+    await this.users.updateOne({ _id }, update); // HERE (Update to allow change in info)
     return { msg: "User updated successfully!" };
   }
 

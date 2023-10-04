@@ -31,6 +31,7 @@ export default class ApplauseConcept {
    */
   async getValueByUser(user: ObjectId) {
     const applause = await this.getByUser(user);
+    console.log(applause);
     return applause?.value;
   }
 
@@ -106,7 +107,7 @@ export default class ApplauseConcept {
    * @throws NoCounterError if the user doesn't have an applause counter
    */
   private async noCounter(user: ObjectId) {
-    const applause = await this.getByUser(user);
+    const applause = await this.applauses.readOne({ user });
     if (!applause) {
       throw new NoCounterError(user);
     }
@@ -124,7 +125,7 @@ export default class ApplauseConcept {
     if (!applause) {
       throw new NoCounterError(user);
     }
-    const newValue = applause.value + amount;
+    const newValue = Number(applause.value) + Number(amount);
     await this.applauses.updateOne({ user }, { value: newValue });
     return newValue;
   }

@@ -66,6 +66,12 @@ const operations: operation[] = [
     fields: { name: "input", description: "input" },
   },
   {
+    name: "Get all Categories",
+    endpoint: "/api/categories",
+    method: "GET",
+    fields: {},
+  },
+  {
     name: "Create Focused Post",
     endpoint: "/api/focusedPosts",
     method: "POST",
@@ -198,17 +204,11 @@ const operations: operation[] = [
     fields: {},
   },
   {
-    name: "Get applause ranking of users by their ids",
+    name: "Get applause ranking of users by their ids (Doesnt work on web tester due to missing list addition)",
     endpoint: "/api/applause/ranking",
     method: "GET",
     fields: { users: { user1: "input", user2: "input", user3: "input" } },
   }, // HERE (How do i do array??)
-  {
-    name: "Get your own applause count",
-    endpoint: "/api/applause",
-    method: "GET",
-    fields: {},
-  },
   {
     name: "Add value to your applause counter",
     endpoint: "/api/applause/add",
@@ -216,7 +216,7 @@ const operations: operation[] = [
     fields: { value: "input" },
   },
   {
-    name: "Remove value from your applause counter",
+    name: "Remove value from your applause counter (must be negative)",
     endpoint: "/api/applause/remove",
     method: "PATCH",
     fields: { value: "input" },

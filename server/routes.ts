@@ -33,7 +33,7 @@ class Routes {
 
   @Router.get("/users/:name")
   async getUser(name: string) {
-    return await User.getUserByEmail(name);
+    return await User.getUsers(name);
   }
 
   @Router.post("/users")
@@ -41,6 +41,7 @@ class Routes {
     WebSession.isLoggedOut(session);
     const createdUser = await User.create(email, password, name, information);
     if (createdUser.user) {
+      console.log("Here");
       await Applause.initialize(createdUser.user._id);
     }
 
@@ -83,7 +84,7 @@ class Routes {
   }
 
   @Router.post("/focusedPosts")
-  async createPost(session: WebSessionDoc, content: string, media: string, category: ObjectId) {
+  async createPost(session: WebSessionDoc, content: string, media: ObjectId, category: ObjectId) {
     const user = WebSession.getUser(session);
     const created = await FocusedPost.create(user, content, media, category);
     return { msg: created.msg, post: await Responses.post(created.post) };
@@ -98,12 +99,17 @@ class Routes {
   @Router.delete("/focusedPosts/:_id")
   async deletePost(session: WebSessionDoc, _id: ObjectId) {
     const user = WebSession.getUser(session);
-    return FocusedPost.delete(_id, user);
+    return await FocusedPost.delete(_id, user);
+  }
+
+  @Router.get("/categories")
+  async getCategories() {
+    return await FocusedPost.getAllCategories();
   }
 
   @Router.post("/categories")
   async addCategory(name: string, description: string) {
-    return FocusedPost.createCategory(name, description);
+    return await FocusedPost.createCategory(name, description);
   }
 
   /////////////////////////////////////////CONNECTIONS//////////////////////////////////////////////
@@ -155,7 +161,7 @@ class Routes {
   @Router.get("/comments/post/:postId")
   async getComments(postId: ObjectId) {
     const directComments = await Comment.getByParent(postId);
-    return Responses.comments(directComments); // HERE (Update to include subcomments)
+    return await Responses.comments(directComments); // HERE (Update to include subcomments)
   }
 
   @Router.post("/comments")
