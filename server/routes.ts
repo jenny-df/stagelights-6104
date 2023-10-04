@@ -8,7 +8,6 @@ import { FocusedPostDoc } from "./concepts/post";
 import { UserDoc, UserInfoDoc } from "./concepts/user";
 import { WebSessionDoc } from "./concepts/websession";
 import Responses from "./responses";
-
 class Routes {
   /////////////////////////////////////////SESSIONS//////////////////////////////////////////////
 
@@ -330,6 +329,109 @@ class Routes {
     const user = WebSession.getUser(session);
     return await Opportunity.delete(_id, user);
   }
+
+  /////////////////////////////////////////APP HOURS//////////////////////////////////////////////
+
+  // @Router.patch("/apphours/settings")
+  // async editAppHoursSettings(totalTime: number, minTime: number, divisions: AppCategoriesDoc[]) {
+  //   return null;
+  // }
+
+  // @Router.patch("/apphours")
+  // async editAppHours(session: WebSessionDoc, timeDivision: HourDivision[]) {
+  //   return null;
+  // }
+
+  /////////////////////////////////////////APPLICATION//////////////////////////////////////////////
+
+  // @Router.post("/application")
+  // async initializeQueue(user: WebSessionDoc, portflio: ObjectId, text: string, media: ObjectId) {
+  //   return null;
+  // }
+
+  // @Router.patch("/application/:_id")
+  // async updateStatus(_id: ObjectId, newStatus: string) {
+  //   return null;
+  // }
+
+  /////////////////////////////////////////PORTFOLIO//////////////////////////////////////////////
+
+  // @Router.post("/portfolio")
+  // async initializePortfolio(session: WebSessionDoc, style: Style, info: ProfessionalInfo, media: ObjectId[], intro: string) {
+  //   return null;
+  // }
+
+  // @Router.patch("/portfolio")
+  // async editPortfolio(session: WebSessionDoc, update: Partial<PortfolioDoc>) {
+  //   return null;
+  // }
+
+  /////////////////////////////////////////PRACTICE FOLDER//////////////////////////////////////////////
+
+  // @Router.patch("/practicefolder/add")
+  // async addItem(session: WebSessionDoc, content: ObjectId[]) {
+  //   return null;
+  // }
+
+  // @Router.patch("/practicefolder/remove")
+  // async removeItem(session: WebSessionDoc, content: ObjectId[]) {
+  //   return null;
+  // }
+
+  // @Router.patch("/practicefolder/settings")
+  // async changeSettings(capacityLimit: number) {
+  //   return null;
+  // }
+
+  /////////////////////////////////////////QUEUE//////////////////////////////////////////////
+
+  // @Router.post("/queue")
+  // async initializeQueue(user: WebSessionDoc, queue: ObjectId[], rankings: ObjectId[], timePerPerson: number, startTime: Date) {
+  //   return null;
+  // }
+  // @Router.patch("/queue")
+  // async nextInQueue(_id: ObjectId) {
+  //   return null;
+  // }
+
+  /////////////////////////////////////////RESTRICTIONS//////////////////////////////////////////////
+
+  // @Router.get("/restrictions")
+  // async getAllowed(user: WebSessionDoc) {
+  //   return null;
+  // }
+
+  // @Router.patch("/restrictions/general")
+  // async updateTypes(user: WebSessionDoc, accountTypes: string[]) {
+  //   return null;
+  // }
+
+  // @Router.patch("/restrictions/childToAdult")
+  // async childToAdult(user: WebSessionDoc) {
+  //   return null;
+  // }
+
+  /////////////////////////////////////////VOTE//////////////////////////////////////////////
+
+  // @Router.get("/vote/:post")
+  // async postVotes(post: ObjectId) {
+  //   return null;
+  // }
+
+  // @Router.post("/vote/upvote")
+  // async upvote(user: WebSessionDoc, post: ObjectId) {
+  //   return null;
+  // }
+
+  // @Router.post("/vote/downvote")
+  // async downvote(user: WebSessionDoc, post: ObjectId) {
+  //   return null;
+  // }
+
+  // @Router.delete("/vote/:id")
+  // async deleteVote(_id: ObjectId) {
+  //   return null;
+  // }
 }
 
 export default getExpressRouter(new Routes());
