@@ -1,7 +1,7 @@
 import { Filter, ObjectId } from "mongodb";
 
 import DocCollection, { BaseDoc } from "../framework/doc";
-import { NotAllowedError, NotFoundError } from "./errors";
+import { BadValuesError, NotAllowedError, NotFoundError } from "./errors";
 
 export interface FocusedPostDoc extends BaseDoc {
   author: ObjectId;
@@ -57,6 +57,39 @@ export default class FocusedPostConcept {
   }
 
   /**
+   * Finds a post by id
+   * @param _id id of the post
+   * @returns post that has that id
+   * @throws BadValuesError if no post exists with that id
+   */
+  async getById(_id: ObjectId) {
+    const post = await this.posts.readOne({ _id });
+    if (post) {
+      return post;
+    }
+    throw new BadValuesError("Post doesn't exist");
+  }
+
+  /**
+   * Finds a post by id and verifies if it was posted by the person given
+   * @param _id id of the post
+   * @param author id of the potential author
+   * @returns post that has that id
+   * @throws BadValuesError if no post exists with that id
+   * @throws NotFoundError if the post's author isn't the one given
+   */
+  async getAndVerify(_id: ObjectId, author: ObjectId) {
+    const post = await this.posts.readOne({ _id });
+    if (post) {
+      if (post.author.toString() == author.toString()) {
+        return post;
+      }
+      throw new NotFoundError("Post's author isn't the one given");
+    }
+    throw new BadValuesError("Post doesn't exist");
+  }
+
+  /**
    * Updates information about a post
    * @param _id id of a post
    * @param update the new information of the post
@@ -68,6 +101,7 @@ export default class FocusedPostConcept {
   async update(_id: ObjectId, update: Partial<FocusedPostDoc>, userId: ObjectId) {
     await this.isAuthor(userId, _id);
     this.sanitizeUpdate(update);
+    await this.checkUpdatedCategory(update);
     await this.posts.updateOne({ _id }, update);
     return { msg: "Focused post successfully updated!" };
   }
@@ -113,6 +147,7 @@ export default class FocusedPostConcept {
    * @throws NotAllowedError if the category is found
    */
   async createCategory(name: string, description: string) {
+    this.validCategory(name, description);
     await this.checkNotCategory(name);
     const _id = await this.categories.createOne({ name, description });
     return { msg: "Category successfully created!", category: await this.categories.readOne({ _id }) };
@@ -147,6 +182,12 @@ export default class FocusedPostConcept {
     }
   }
 
+  private async checkUpdatedCategory(update: Partial<FocusedPostDoc>) {
+    if (update.category) {
+      await this.checkCategory(update.category);
+    }
+  }
+
   /**
    * Checks if a given category already exists
    * @param _id id of the category
@@ -159,6 +200,12 @@ export default class FocusedPostConcept {
     }
   }
 
+  private validCategory(name: string, description: string) {
+    if (!(name && description)) {
+      throw new NotAllowedError("Name or description of category missing");
+    }
+  }
+
   /**
    *
    * @param content text of a post
@@ -167,9 +214,10 @@ export default class FocusedPostConcept {
    */
   private async verifyCategory(content: string, category: ObjectId) {
     // HERE (Need a way to verify that the content belongs to the content)
-    if (!(content && category)) {
-      throw new NotAllowedError(`Category doesnt match content`);
+    if (content && category) {
+      return;
     }
+    throw new NotAllowedError(`Category or content missing`);
   }
 
   /**
@@ -179,7 +227,7 @@ export default class FocusedPostConcept {
    */
   private sanitizeUpdate(update: Partial<FocusedPostDoc>) {
     // Make sure the update cannot change the author.
-    const allowedUpdates = ["content", "media", "options"];
+    const allowedUpdates = ["content", "media", "category"];
     for (const key in update) {
       if (!allowedUpdates.includes(key)) {
         throw new NotAllowedError(`Cannot update '${key}' field!`);

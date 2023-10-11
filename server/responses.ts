@@ -144,9 +144,10 @@ export default class Responses {
    */
   static async connectionRequests(requests: ConnectionRequestDoc[]) {
     const from = requests.map((request) => request.from);
+    const fromNames = await User.idsToNames(from);
     const to = requests.map((request) => request.to);
-    const names = await User.idsToNames(from.concat(to));
-    return requests.map((request, i) => ({ ...request, from: names[i], to: names[i + requests.length] }));
+    const toNames = await User.idsToNames(to);
+    return requests.map((request, i) => ({ ...request, from: fromNames[i], to: toNames[i] }));
   }
 }
 

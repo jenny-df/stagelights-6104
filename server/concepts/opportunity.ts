@@ -21,7 +21,7 @@ export interface OpportunityDoc extends BaseDoc {
 }
 
 export default class OpportunityConcept {
-  public readonly opportunities = new DocCollection<OpportunityDoc>("applauses");
+  public readonly opportunities = new DocCollection<OpportunityDoc>("opportunities");
 
   /**
    * Creates an opportunity listing
@@ -63,7 +63,7 @@ export default class OpportunityConcept {
    * @returns an opportunity object
    */
   async getById(_id: ObjectId) {
-    return await this.opportunities.readOne(_id);
+    return await this.opportunities.readOne({ _id });
   }
 
   /**
@@ -95,7 +95,8 @@ export default class OpportunityConcept {
     await this.opportunityExists(_id);
     const opportunity = await this.getById(_id);
     if (opportunity) {
-      return opportunity.startOn <= start && end <= opportunity.endsOn;
+      console.log(opportunity.startOn, start, end, opportunity.endsOn);
+      return start <= opportunity.startOn && opportunity.endsOn <= end;
     }
   }
 
@@ -111,8 +112,19 @@ export default class OpportunityConcept {
   async update(_id: ObjectId, user: ObjectId, update: Partial<OpportunityDoc>) {
     await this.opportunityExists(_id);
     await this.opportunityByUser(_id, user);
-    await this.opportunities.updateOne({ _id }, update);
-    return { msg: "Opportunity updated successfully!" };
+    const oldOp = await this.getById(_id);
+    if (oldOp) {
+      if (update.startOn && update.endsOn) {
+        this.checkDateValidity(new Date(update.startOn), new Date(update.endsOn));
+      } else if (update.startOn && !update.endsOn) {
+        this.checkDateValidity(new Date(update.startOn), oldOp.endsOn);
+      } else if (!update.startOn && update.endsOn) {
+        this.checkDateValidity(oldOp.startOn, new Date(update.endsOn));
+      }
+      await this.opportunities.updateOne({ _id }, update);
+      return { msg: "Opportunity updated successfully!" };
+    }
+    // will never reach here
   }
 
   /**
@@ -191,7 +203,7 @@ export default class OpportunityConcept {
    */
   private async opportunityByUser(_id: ObjectId, user: ObjectId) {
     const opportunity = await this.opportunities.readOne({ _id });
-    if (opportunity?.user !== user) {
+    if (opportunity?.user.toString() !== user.toString()) {
       throw new NotOwnerError(user, _id);
     }
   }

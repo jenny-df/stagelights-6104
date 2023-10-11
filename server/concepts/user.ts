@@ -69,7 +69,6 @@ export default class UserConcept {
    */
   async idsToNames(ids: ObjectId[]) {
     const users = await this.users.readMany({ _id: { $in: ids } });
-
     // Store strings in Map because ObjectId comparison by reference is wrong
     const idToUser = new Map(users.map((user) => [user._id.toString(), user]));
     return ids.map((id) => idToUser.get(id.toString())?.name ?? "DELETED_USER");

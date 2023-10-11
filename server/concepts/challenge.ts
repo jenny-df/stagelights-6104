@@ -57,9 +57,9 @@ export default class ChallengeConcept {
       const numAccepted = 0;
       const challenger = randomlySelected.challenger;
       const prompt = randomlySelected.prompt;
-      const postedId = await this.proposed.createOne({ challenger, prompt, numAccepted });
-      await this.proposed.deleteOne({ proposedId });
-      return { msg: "Challenge successfully posted!", posted: await this.posted.readOne({ postedId }) };
+      const postedId = await this.posted.createOne({ challenger, prompt, numAccepted });
+      await this.proposed.deleteOne({ _id: proposedId });
+      return { msg: "Challenge successfully posted!", posted: await this.posted.readOne({ _id: postedId }) };
     }
     throw new NoProposedChallenges();
   }
@@ -72,8 +72,9 @@ export default class ChallengeConcept {
   async updateChallengeCount(_id: ObjectId, value: number) {
     const challenge = await this.posted.readOne({ _id });
     if (challenge) {
-      const numAccepted = challenge.numAccepted + value;
+      const numAccepted = Math.max(0, challenge.numAccepted + value);
       await this.posted.updateOne({ _id }, { numAccepted }); // HERE (Might be incorrect)
+      return { msg: "Challenge count updated successfully, count is: ", numAccepted };
     }
     throw new ChallengeNotFound(_id);
   }

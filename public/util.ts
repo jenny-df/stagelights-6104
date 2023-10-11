@@ -54,12 +54,6 @@ const operations: operation[] = [
     fields: { name: "input" },
   },
   {
-    name: "Get Focused Posts (empty for all)",
-    endpoint: "/api/focusedPosts",
-    method: "GET",
-    fields: { author: "input" },
-  },
-  {
     name: "Create Focused Post Category",
     endpoint: "/api/categories",
     method: "POST",
@@ -70,6 +64,12 @@ const operations: operation[] = [
     endpoint: "/api/categories",
     method: "GET",
     fields: {},
+  },
+  {
+    name: "Get Focused Posts (empty for all)",
+    endpoint: "/api/focusedPosts",
+    method: "GET",
+    fields: { authorEmail: "input" },
   },
   {
     name: "Create Focused Post",
@@ -96,19 +96,25 @@ const operations: operation[] = [
     fields: {},
   },
   {
+    name: "See your connection requests",
+    endpoint: "/api/connections/requests",
+    method: "GET",
+    fields: {},
+  },
+  {
     name: "Remove a connection",
     endpoint: "/api/connections/:id",
     method: "DELETE",
     fields: { id: "input" },
   },
   {
-    name: "See your requests",
+    name: "Send a connection request to someone",
     endpoint: "/api/connections/requests",
-    method: "GET",
-    fields: {},
+    method: "POST",
+    fields: { receiverId: "input" },
   },
   {
-    name: "Delete a connection request to someone",
+    name: "Cancel a connection request to someone",
     endpoint: "/api/connections/requests/:id",
     method: "DELETE",
     fields: { id: "input" },
@@ -126,16 +132,16 @@ const operations: operation[] = [
     fields: { id: "input" },
   },
   {
-    name: "Get comments for a post",
+    name: "Get comments for a post (don't leave empty)",
     endpoint: "/api/comments/post/:postId",
     method: "GET",
     fields: { postId: "input" },
   },
   {
-    name: "Add a comment",
+    name: "Add a comment by post id",
     endpoint: "/api/comments",
     method: "POST",
-    fields: { postId: "input", content: "input" },
+    fields: { post: "input", content: "input" },
   },
   {
     name: "Edit a comment",
@@ -157,15 +163,21 @@ const operations: operation[] = [
   },
   {
     name: "Get tags for a user",
-    endpoint: "/api/tags/user/:id",
+    endpoint: "/api/tags/user/:userId",
     method: "GET",
     fields: { userId: "input" },
   },
   {
-    name: "Delete a comment",
+    name: "Add a tag by user id and post id",
     endpoint: "/api/tags",
     method: "POST",
-    fields: { postId: "input", taggedUserId: "input" },
+    fields: { post: "input", tagged: "input" },
+  },
+  {
+    name: "Delete a tag by user id and post id",
+    endpoint: "/api/tags",
+    method: "DELETE",
+    fields: { post: "input", tagged: "input" },
   },
   {
     name: "Get Challenges (leave empty for all)",
@@ -187,13 +199,13 @@ const operations: operation[] = [
   },
   {
     name: "Accept a challenge",
-    endpoint: "/api/challenges/accept/:_id",
+    endpoint: "/api/challenges/accept/:id",
     method: "PATCH",
     fields: { id: "input" },
   },
   {
     name: "Reject a challenge",
-    endpoint: "/api/challenges/reject/:_id",
+    endpoint: "/api/challenges/reject/:id",
     method: "PATCH",
     fields: { id: "input" },
   },
@@ -234,16 +246,22 @@ const operations: operation[] = [
     fields: { searched: "input" },
   },
   {
-    name: "See if an opportunity fits in date range",
+    name: "See if an opportunity fits in date range (enter opportunity id, start date and end date)",
     endpoint: "/api/opportunities/inRange",
     method: "GET",
-    fields: { id: "input", startDate: "input", endDate: "input" },
+    fields: { id: "input", start: "input", end: "input" },
   },
   {
     name: "Create an opportunity",
     endpoint: "/api/opportunities",
     method: "POST",
     fields: { title: "input", description: "input", startOn: "input", endsOn: "input", requirements: { physical: "input", skill: "input", location: "input" } },
+  },
+  {
+    name: "Edit an existing opportunity",
+    endpoint: "/api/opportunities",
+    method: "PATCH",
+    fields: { id: "input", update: { title: "input", description: "input", startOn: "input", endsOn: "input", requirements: { physical: "input", skill: "input", location: "input" } } },
   },
   {
     name: "Deactivate an opportunity by id",

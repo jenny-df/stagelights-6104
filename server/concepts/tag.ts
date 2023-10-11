@@ -1,7 +1,7 @@
 import { Filter, ObjectId } from "mongodb";
 
 import DocCollection, { BaseDoc } from "../framework/doc";
-import { NotAllowedError, NotFoundError } from "./errors";
+import { BadValuesError, NotAllowedError, NotFoundError } from "./errors";
 
 export interface TagDoc extends BaseDoc {
   tagger: ObjectId;
@@ -20,6 +20,7 @@ export default class TagConcept {
    * @returns an object containing a success message and the tag object
    */
   async create(tagger: ObjectId, tagged: ObjectId, post: ObjectId) {
+    await this.tagExists(tagged, post);
     const _id = await this.tags.createOne({ tagger, tagged, post });
     return { msg: "Tag successfully created!", tag: await this.tags.readOne({ _id }) };
   }
@@ -38,20 +39,37 @@ export default class TagConcept {
    * @user id of the user that we're retrieving tags for
    * @returns tag objects which belong to a given user
    */
-  async getByTagged(user: ObjectId) {
-    return await this.getTags({ user });
+  async getByTagged(tagged: ObjectId) {
+    return await this.getTags({ tagged });
   }
 
   /**
    * Removes a given tag
-   * @param _id id of the tag
    * @param user id of the user trying to delete tag
+   * @param tagged id of tagged user
+   * @param post id of post
    * @returns an object containing a success message
+   * @throws Bad
    */
-  async delete(_id: ObjectId, user: ObjectId) {
-    await this.isTagger(_id, user);
-    await this.tags.deleteOne({ _id });
-    return { msg: "Tag deleted successfully!" };
+  async delete(user: ObjectId, tagged: ObjectId, post: ObjectId) {
+    return await this.deleteTag(user, tagged, post);
+  }
+
+  private async tagExists(tagged: ObjectId, post: ObjectId) {
+    const tag = await this.tags.readOne({ tagged, post });
+    if (tag) {
+      throw new NotAllowedError("can't duplicate a tag");
+    }
+  }
+
+  private async deleteTag(user: ObjectId, tagged: ObjectId, post: ObjectId) {
+    const tagId = (await this.tags.readOne({ tagged, post }))?._id;
+    if (tagId) {
+      await this.isTagger(tagId, user);
+      await this.tags.deleteOne({ _id: tagId });
+      return { msg: "Tag deleted successfully!" };
+    }
+    throw new BadValuesError("Tag doesn't exist");
   }
 
   /**

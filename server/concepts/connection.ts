@@ -23,9 +23,7 @@ export default class ConnectionConcept {
    * @returns the requests to and from a given user
    */
   async getRequests(user: ObjectId) {
-    return await this.requests.readMany({
-      $or: [{ from: user }, { to: user }],
-    });
+    return await this.requests.readMany({ to: user, status: "pending" });
   }
 
   /**
@@ -85,15 +83,15 @@ export default class ConnectionConcept {
    * @returns an object containing a success message
    * @throws ConnectionNotFoundError if the connection doesn't exist
    */
-  async removeConnection(user: ObjectId, connection_id: ObjectId) {
+  async removeConnection(user: ObjectId, user2: ObjectId) {
     const connection = await this.connection.popOne({
       $or: [
-        { user1: user, user2: connection_id },
-        { user1: connection_id, user2: user },
+        { user1: user, user2: user2 },
+        { user1: user2, user2: user },
       ],
     });
     if (connection === null) {
-      throw new ConnectionNotFoundError(user, connection_id);
+      throw new ConnectionNotFoundError(user, user2);
     }
     return { msg: "Removed connection!" };
   }
@@ -142,8 +140,8 @@ export default class ConnectionConcept {
   private async isNotConnected(u1: ObjectId, u2: ObjectId) {
     const connection = await this.connection.readOne({
       $or: [
-        { user1: u1, user2: u2 },
-        { user1: u2, user2: u1 },
+        { from: u1, to: u2 },
+        { from: u2, to: u1 },
       ],
     });
     if (connection !== null || u1.toString() === u2.toString()) {

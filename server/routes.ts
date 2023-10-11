@@ -40,8 +40,8 @@ class Routes {
     WebSession.isLoggedOut(session);
     const createdUser = await User.create(email, password, name, information);
     if (createdUser.user) {
-      console.log("Here");
       await Applause.initialize(createdUser.user._id);
+      // await AppHours.initialize()
     }
 
     return createdUser;
@@ -71,10 +71,10 @@ class Routes {
   /////////////////////////////////////////FOCUSED POSTS//////////////////////////////////////////////
 
   @Router.get("/focusedPosts")
-  async getPosts(author?: string) {
+  async getPosts(authorEmail?: string) {
     let posts;
-    if (author) {
-      const id = (await User.getUserByEmail(author))._id;
+    if (authorEmail) {
+      const id = (await User.getUserByEmail(authorEmail))._id;
       posts = await FocusedPost.getByAuthor(id);
     } else {
       posts = await FocusedPost.getFocusedPosts({});
@@ -119,22 +119,32 @@ class Routes {
     return await User.idsToNames(await Connection.getConnections(user));
   }
 
-  @Router.delete("/connections/:connectionId")
-  async removeFriend(session: WebSessionDoc, connectionId: ObjectId) {
-    const user = WebSession.getUser(session);
-    return await Connection.removeConnection(user, connectionId);
-  }
-
   @Router.get("/connections/requests")
   async getRequests(session: WebSessionDoc) {
     const user = WebSession.getUser(session);
-    return await Responses.connectionRequests(await Connection.getRequests(user));
+    const requests = await Connection.getRequests(user);
+    return await Responses.connectionRequests(requests);
   }
 
-  @Router.post("/connections/requests/:to")
-  async sendConnectionRequest(session: WebSessionDoc, to: ObjectId) {
+  @Router.post("/connections/requests")
+  async sendConnectionRequest(session: WebSessionDoc, receiverId: ObjectId) {
     const user = WebSession.getUser(session);
+    const to = (await User.getUserById(receiverId))._id; // Verify to id
     return await Connection.sendRequest(user, to);
+  }
+
+  @Router.patch("/connections/accept/:from")
+  async acceptConnectionRequest(session: WebSessionDoc, from: ObjectId) {
+    const user = WebSession.getUser(session);
+    const senderId = (await User.getUserById(from))._id; // Verify to id
+    return await Connection.acceptRequest(senderId, user);
+  }
+
+  @Router.patch("/connections/reject/:from")
+  async rejectConnectionRequest(session: WebSessionDoc, from: ObjectId) {
+    const user = WebSession.getUser(session);
+    const senderId = (await User.getUserById(from))._id; // Verify to id
+    return await Connection.rejectRequest(senderId, user);
   }
 
   @Router.delete("/connections/requests/:to")
@@ -143,30 +153,26 @@ class Routes {
     return await Connection.removeRequest(user, to);
   }
 
-  @Router.patch("/connections/accept/:from")
-  async acceptConnectionRequest(session: WebSessionDoc, from: ObjectId) {
+  @Router.delete("/connections/:user2")
+  async removeFriend(session: WebSessionDoc, user2: ObjectId) {
     const user = WebSession.getUser(session);
-    return await Connection.acceptRequest(from, user);
-  }
-
-  @Router.patch("/connections/reject/:from")
-  async rejectConnectionRequest(session: WebSessionDoc, from: ObjectId) {
-    const user = WebSession.getUser(session);
-    return await Connection.rejectRequest(from, user);
+    const user2Id = (await User.getUserById(user2))._id; // Verify to id
+    return await Connection.removeConnection(user, user2Id);
   }
 
   /////////////////////////////////////////COMMENTS//////////////////////////////////////////////
 
   @Router.get("/comments/post/:postId")
   async getComments(postId: ObjectId) {
-    const directComments = await Comment.getByParent(postId);
-    return await Responses.comments(directComments); // HERE (Update to include subcomments)
+    const directComments = await Comment.getByParent(new ObjectId(postId));
+    return await Responses.comments(directComments);
   }
 
   @Router.post("/comments")
   async createComment(session: WebSessionDoc, post: ObjectId, content: string) {
     const user = WebSession.getUser(session);
-    const created = await Comment.create(user, content, post);
+    const postId = (await FocusedPost.getById(post))._id;
+    const created = await Comment.create(user, content, postId);
     return { msg: created.msg, post: await Responses.comment(created.comment) };
   }
 
@@ -186,27 +192,33 @@ class Routes {
 
   @Router.get("/tags/post/:postId")
   async getPostTags(postId: ObjectId) {
-    const tags = await Tag.getByPost(postId);
+    const post = (await FocusedPost.getById(postId))._id; // verify post
+    const tags = await Tag.getByPost(post);
     return await Responses.tags(tags);
   }
 
   @Router.get("/tags/user/:userId")
   async getUserTags(userId: ObjectId) {
-    const tags = await Tag.getByTagged(userId);
+    const user = (await User.getUserById(userId))._id; // verify user
+    const tags = await Tag.getByTagged(user);
     return await Responses.tags(tags);
   }
 
   @Router.post("/tags")
   async createTag(session: WebSessionDoc, post: ObjectId, tagged: ObjectId) {
     const user = WebSession.getUser(session);
-    const created = await Tag.create(user, tagged, post);
+    const taggedId = (await User.getUserById(tagged))._id; // verify user
+    const postId = (await FocusedPost.getAndVerify(post, user))._id; // verify post
+    const created = await Tag.create(user, taggedId, postId);
     return { msg: created.msg, post: await Responses.tag(created.tag) };
   }
 
-  @Router.delete("/tags/:_id")
-  async deleteTag(session: WebSessionDoc, _id: ObjectId) {
+  @Router.delete("/tags")
+  async deleteTag(session: WebSessionDoc, post: ObjectId, tagged: ObjectId) {
     const user = WebSession.getUser(session);
-    return await Tag.delete(_id, user);
+    const taggedId = (await User.getUserById(tagged))._id; // verify user
+    const postId = (await FocusedPost.getById(post))._id; // verify post
+    return await Tag.delete(user, taggedId, postId);
   }
 
   /////////////////////////////////////////CHALLANGES//////////////////////////////////////////////
@@ -239,12 +251,12 @@ class Routes {
 
   @Router.patch("/challenges/accept/:_id")
   async acceptChallenge(_id: ObjectId) {
-    await Challenge.updateChallengeCount(_id, 1);
+    return await Challenge.updateChallengeCount(new ObjectId(_id), 1);
   }
 
   @Router.patch("/challenges/reject/:_id")
   async rejectChallenge(_id: ObjectId) {
-    await Challenge.updateChallengeCount(_id, -1);
+    return await Challenge.updateChallengeCount(new ObjectId(_id), -1);
   }
 
   /////////////////////////////////////////APPLAUSE//////////////////////////////////////////////
@@ -257,7 +269,8 @@ class Routes {
 
   @Router.get("/applause/ranking")
   async rank(users: ObjectId[]) {
-    const ranking = await Applause.rank(users);
+    const userIds = await Promise.all(users.map(async (user) => (await User.getUserById(user))?._id)); // verify users
+    const ranking = await Applause.rank(userIds);
     return Responses.applauses(ranking);
   }
 
@@ -277,35 +290,42 @@ class Routes {
 
   @Router.get("/opportunities/id")
   async getOpportunities() {
-    return await Opportunity.getAll();
+    const opportunities = await Opportunity.getAll();
+    return await Responses.opportunities(opportunities);
   }
 
-  @Router.get("/opportunities/id/:id")
+  @Router.get("/opportunities/id/:_id")
   async getOpportunityById(_id: ObjectId) {
-    return await Opportunity.getById(_id);
+    const opportunity = await Opportunity.getById(_id);
+    return await Responses.opportunity(opportunity);
   }
 
   @Router.get("/opportunities/title/:searched")
   async getOpportunitiesByTitle(searched: string) {
-    return await Opportunity.getByTitle(searched);
+    const opportunities = await Opportunity.getByTitle(searched);
+    return await Responses.opportunities(opportunities);
   }
 
   @Router.get("/opportunities/inRange")
-  async opportunityInRange(_id: ObjectId, start: Date, end: Date) {
-    return await Opportunity.datesInRange(_id, start, end);
+  async opportunityInRange(id: ObjectId, start: Date, end: Date) {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    return await Opportunity.datesInRange(id, startDate, endDate);
   }
 
   @Router.post("/opportunities")
   async createOpportunity(session: WebSessionDoc, title: string, description: string, startOn: Date, endsOn: Date, requirements: Requirements) {
     const user = WebSession.getUser(session);
-    const created = await Opportunity.create(user, title, description, startOn, endsOn, requirements);
+    const startDate = new Date(startOn);
+    const endDate = new Date(endsOn);
+    const created = await Opportunity.create(user, title, description, startDate, endDate, requirements);
     return { msg: created.msg, challenge: await Responses.opportunity(created.opportunity) };
   }
 
   @Router.patch("/opportunities")
-  async updateOpportunity(session: WebSessionDoc, _id: ObjectId, update: Partial<OpportunityDoc>) {
+  async updateOpportunity(session: WebSessionDoc, id: ObjectId, update: Partial<OpportunityDoc>) {
     const user = WebSession.getUser(session);
-    return await Opportunity.update(_id, user, update);
+    return await Opportunity.update(id, user, update);
   }
 
   @Router.patch("/opportunities/deactivate/:_id")
@@ -432,6 +452,13 @@ class Routes {
   // async deleteVote(_id: ObjectId) {
   //   return null;
   // }
+
+  /////////////////////////////////////////CATCH ALL//////////////////////////////////////////////
+
+  @Router.get("/*")
+  catchAllError() {
+    return { msg: "route doesn't exist" };
+  }
 }
 
 export default getExpressRouter(new Routes());
