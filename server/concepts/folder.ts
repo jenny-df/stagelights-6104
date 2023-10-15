@@ -206,7 +206,7 @@ export default class FolderConcept {
    * @param _id id of the repertoire folder
    * @returns the repertoire object if found
    * @throws NotFoundError if no repertoire is found with given id
-   * @throws NotOwnerError if the user given isn't the owner
+   * @throws NotFolderOwnerError if the user given isn't the owner
    */
   private async repertoireFolderFinder(user: ObjectId, _id: ObjectId) {
     const repertoire = await this.repertoireFolders.readOne({ _id });
@@ -214,7 +214,7 @@ export default class FolderConcept {
       throw new NotFoundError("There is no repertoire folder with id {0}", _id);
     }
     if (repertoire.user.toString() !== user.toString()) {
-      throw new NotOwnerError(user);
+      throw new NotFolderOwnerError(user);
     }
     return repertoire;
   }
@@ -232,7 +232,7 @@ export class NoPracticeFolderError extends NotFoundError {
   }
 }
 
-export class NotOwnerError extends NotAllowedError {
+export class NotFolderOwnerError extends NotAllowedError {
   constructor(public readonly user: ObjectId) {
     super("The user {0} isn't the owner of this folder", user);
   }

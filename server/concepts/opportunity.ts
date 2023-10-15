@@ -1,7 +1,7 @@
 import { ObjectId } from "mongodb";
 
 import DocCollection, { BaseDoc } from "../framework/doc";
-import { BadValuesError, NotAllowedError } from "./errors";
+import { BadValuesError, NotAllowedError, NotFoundError } from "./errors";
 
 export interface Requirements {
   physical: string[];
@@ -211,7 +211,7 @@ export default class OpportunityConcept {
   private async opportunityExists(_id: ObjectId) {
     const opportunity = await this.opportunities.readOne({ _id });
     if (!opportunity) {
-      throw new OpportunityDoestExistError(_id);
+      throw new NotFoundError("Opportunity ({0}) doesn't exist!", _id);
     }
     return opportunity;
   }
@@ -221,12 +221,12 @@ export default class OpportunityConcept {
    * @param _id id of the opportunity
    * @param user id of the user we're checking
    * @returns opportunity object if it exists
-   * @throws NotOwnerError if the user given isn't the owner of the opportunity
+   * @throws NotOpportunityOwnerError if the user given isn't the owner of the opportunity
    */
   private async opportunityByUser(_id: ObjectId, user: ObjectId) {
     const opportunity = await this.opportunityExists(_id);
     if (opportunity.user.toString() !== user.toString()) {
-      throw new NotOwnerError(user, _id);
+      throw new NotOpportunityOwnerError(user, _id);
     }
     return opportunity;
   }
@@ -244,17 +244,11 @@ export default class OpportunityConcept {
   }
 }
 
-export class NotOwnerError extends NotAllowedError {
+export class NotOpportunityOwnerError extends NotAllowedError {
   constructor(
     public readonly user: ObjectId,
     public readonly _id: ObjectId,
   ) {
     super("Opportunity ({0}) isn't owned by {1}!", _id, user);
-  }
-}
-
-export class OpportunityDoestExistError extends NotAllowedError {
-  constructor(public readonly _id: ObjectId) {
-    super("Opportunity ({0}) doesn't exist!", _id);
   }
 }
