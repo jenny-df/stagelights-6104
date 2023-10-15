@@ -119,6 +119,7 @@ class Routes {
     const mediaSeperated = mediaURLs.split(", ");
     const media = await Promise.all(mediaSeperated.map(async (url) => await Media.create(user, url)));
     const created = await FocusedPost.create(user, content, media, new ObjectId(category));
+    await Applause.update(user, 3);
     return { msg: created.msg, post: await Responses.post(created.post) };
   }
 
@@ -134,6 +135,7 @@ class Routes {
     const media = await FocusedPost.getMediaById(new ObjectId(id));
     await Promise.all(media.map(async (id) => await Media.delete(id)));
     await Tag.deletePost(new ObjectId(id));
+    await Applause.update(user, -3);
     return await FocusedPost.delete(new ObjectId(id), user);
   }
 
@@ -185,6 +187,8 @@ class Routes {
   async acceptConnectionRequest(session: WebSessionDoc, from: ObjectId) {
     const user = WebSession.getUser(session);
     const senderId = (await User.getUserById(new ObjectId(from)))._id; // Verify to id
+    await Applause.update(user, 1);
+    await Applause.update(senderId, 1);
     return await Connection.acceptRequest(senderId, user);
   }
 
@@ -205,6 +209,8 @@ class Routes {
   async removeFriend(session: WebSessionDoc, user2: ObjectId) {
     const user = WebSession.getUser(session);
     const user2Id = (await User.getUserById(new ObjectId(user2)))._id; // Verify to id
+    await Applause.update(user, -1);
+    await Applause.update(user2Id, -1);
     return await Connection.removeConnection(user, user2Id);
   }
 
@@ -227,6 +233,7 @@ class Routes {
     const user = WebSession.getUser(session);
     const postId = (await FocusedPost.getById(new ObjectId(post)))._id; // verify post
     const created = await Comment.create(user, content, postId);
+    await Applause.update(user, 0.5);
     return { msg: created.msg, post: await Responses.comment(created.comment) };
   }
 
@@ -239,6 +246,7 @@ class Routes {
   @Router.delete("/comments/:_id")
   async deleteComment(session: WebSessionDoc, _id: ObjectId) {
     const user = WebSession.getUser(session);
+    await Applause.update(user, -0.5);
     return await Comment.delete(new ObjectId(_id), user);
   }
 
@@ -266,6 +274,7 @@ class Routes {
     const taggedId = (await User.getUserById(new ObjectId(tagged)))._id; // verify user
     const postId = (await FocusedPost.getAndVerify(new ObjectId(post), user))._id; // verify post
     const created = await Tag.create(user, taggedId, postId);
+    await Applause.update(taggedId, 2);
     return { msg: created.msg, post: await Responses.tag(created.tag) };
   }
 
@@ -276,6 +285,7 @@ class Routes {
     const user = WebSession.getUser(session);
     const taggedId = (await User.getUserById(new ObjectId(tagged)))._id; // verify user
     const postId = (await FocusedPost.getById(new ObjectId(post)))._id; // verify post
+    await Applause.update(taggedId, -2);
     return await Tag.deleteTag(user, taggedId, postId);
   }
 
@@ -295,6 +305,7 @@ class Routes {
   async proposeChallenge(session: WebSessionDoc, prompt: string) {
     const user = WebSession.getUser(session);
     const created = await Challenge.propose(user, prompt);
+    await Applause.update(user, 0.5);
     return { msg: created.msg, challenge: await Responses.challenge(created.proposed) };
   }
 
@@ -314,31 +325,6 @@ class Routes {
     Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
     return await Applause.getValueByUser(user);
-  }
-
-  @Router.get("/applause/ranking")
-  async rank(session: WebSessionDoc, users: ObjectId[]) {
-    const castor = WebSession.isCastor(session);
-    Restrictions.check(castor, "casting director");
-    const userIds = await Promise.all(users.map(async (user) => (await User.getUserById(new ObjectId(user)))?._id)); // verify users
-    const ranking = await Applause.rank(userIds);
-    return Responses.applauses(ranking);
-  }
-
-  @Router.patch("/applause/add")
-  async addApplause(session: WebSessionDoc, value: number) {
-    const actor = WebSession.isActor(session);
-    Restrictions.check(actor, "actor");
-    const user = WebSession.getUser(session);
-    return await Applause.update(user, value);
-  }
-
-  @Router.patch("/applause/remove")
-  async removeApplause(session: WebSessionDoc, value: number) {
-    const actor = WebSession.isActor(session);
-    Restrictions.check(actor, "actor");
-    const user = WebSession.getUser(session);
-    return await Applause.update(user, value);
   }
 
   /////////////////////////////////////////OPPORTUNITY//////////////////////////////////////////////
@@ -382,6 +368,7 @@ class Routes {
     const startDate = new Date(startOn);
     const endDate = new Date(endsOn);
     const created = await Opportunity.create(user, title, description, startDate, endDate, requirements);
+    await Applause.update(user, 3);
     return { msg: created.msg, challenge: await Responses.opportunity(created.opportunity) };
   }
 
@@ -418,6 +405,7 @@ class Routes {
     const castor = WebSession.isCastor(session);
     Restrictions.check(castor, "casting director");
     const user = WebSession.getUser(session);
+    await Applause.update(user, -3);
     return await Opportunity.delete(new ObjectId(_id), user);
   }
 
@@ -454,6 +442,7 @@ class Routes {
     const mediaCreated = await Promise.all(mediaURLs.map(async (url) => await Media.create(user, url)));
     const owner = (await Opportunity.getById(new ObjectId(opId)))?.user ?? new ObjectId();
     const response = await Application.create(owner, user, text, mediaCreated, new ObjectId(opId));
+    await Applause.update(user, 2);
     return { msg: response.msg, application: await Responses.application(response.application) };
   }
 
@@ -461,6 +450,9 @@ class Routes {
   async updateStatus(session: WebSessionDoc, id: ObjectId, newStatus: "rejected" | "approved" | "audition" | "withdrawn") {
     const user = WebSession.getUser(session);
     await Application.changeStatus(user, new ObjectId(id), newStatus);
+    if (newStatus === "withdrawn") {
+      await Applause.update(user, -2);
+    }
     return { msg: "status changed successfully" };
   }
 
@@ -480,6 +472,7 @@ class Routes {
     const mediaCreated = await Promise.all(mediaURLs.map(async (url) => await Media.create(user, url)));
     const headShotCreated = await Media.create(user, heatshot);
     const response = await Portfolio.create(user, style, intro, info, mediaCreated, headShotCreated);
+    await Applause.update(user, 5);
     return { msg: response.msg, portfolio: await Responses.portfolio(response.portfolio) };
   }
 
@@ -497,6 +490,7 @@ class Routes {
     Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
     const mediaId = await Media.create(user, media);
+    await Applause.update(user, 0.5);
     return await Portfolio.addMedia(user, mediaId);
   }
 
@@ -506,6 +500,7 @@ class Routes {
     Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
     await Media.delete(new ObjectId(media));
+    await Applause.update(user, -0.5);
     return await Portfolio.removeMedia(user, new ObjectId(media));
   }
 
@@ -566,6 +561,7 @@ class Routes {
     Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
     const created = await Folder.createRepertoire(user, name);
+    await Applause.update(user, 0.5);
     return { msg: created.msg, folder: await Responses.folder(created.folder) };
   }
 
@@ -590,17 +586,22 @@ class Routes {
     const actor = WebSession.isActor(session);
     Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
+    await Applause.update(user, -0.5);
     return await Folder.deleteRepertoire(user, new ObjectId(_id));
   }
 
   /////////////////////////////////////////QUEUE//////////////////////////////////////////////
 
   @Router.post("/queue")
-  async initializeQueue(session: WebSessionDoc, queueFor: ObjectId, queue: ObjectId[], timePerPerson: number, startTime: Date) {
+  async initializeQueue(session: WebSessionDoc, queueFor: ObjectId, timePerPerson: number, startTime: Date) {
     const castor = WebSession.isCastor(session);
     Restrictions.check(castor, "casting director");
-    const user = WebSession.getUser(session); // HERE ranking
-    const created = await Queue.create(user, new ObjectId(queueFor), queue, new Date(startTime), timePerPerson); // HERE queue needs to be converted to new ObjectId(
+    const user = WebSession.getUser(session);
+    const applications = await Application.getAppsForOp(user, new ObjectId(queueFor));
+    const applicants = applications.map((app) => app.user);
+    const ranked = await Applause.rank(applicants);
+    const queue = ranked.map((applause) => applause.user);
+    const created = await Queue.create(user, new ObjectId(queueFor), queue, new Date(startTime), timePerPerson);
     return { msg: created.msg, queue: await Responses.queue(created.queue) };
   }
 
@@ -616,7 +617,7 @@ class Routes {
   async nextInQueue(session: WebSessionDoc, _id: ObjectId) {
     const castor = WebSession.isCastor(session);
     Restrictions.check(castor, "casting director");
-    const user = WebSession.getUser(session); // HERE update to include info on applicant
+    const user = WebSession.getUser(session);
     const response = await Queue.progressQueue(user, new ObjectId(_id));
     return { next: (await User.getUserById(response.next)).name, current: (await User.getUserById(response.current)).name };
   }
@@ -638,9 +639,10 @@ class Routes {
   }
 
   @Router.patch("/restrictions")
-  async updateTypes(session: WebSessionDoc, accountTypes: string[]) {
+  async updateTypes(session: WebSessionDoc, accountTypes: string) {
     const user = WebSession.getUser(session);
-    return await Restrictions.edit(user, accountTypes);
+    const sepAccountTypes = accountTypes.split(", ");
+    return await Restrictions.edit(user, sepAccountTypes);
   }
 
   /////////////////////////////////////////VOTE//////////////////////////////////////////////
@@ -655,6 +657,8 @@ class Routes {
     const actor = WebSession.isActor(session);
     Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
+    const postAuthor = (await FocusedPost.getById(post)).author; // verify post
+    await Applause.update(postAuthor, 0.5);
     return await Vote.vote(user, new ObjectId(post), true);
   }
 
@@ -663,6 +667,8 @@ class Routes {
     const actor = WebSession.isActor(session);
     Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
+    const postAuthor = (await FocusedPost.getById(post)).author; // verify post
+    await Applause.update(postAuthor, -0.5);
     return await Vote.vote(user, new ObjectId(post), false);
   }
 

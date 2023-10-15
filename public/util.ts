@@ -216,24 +216,6 @@ const operations: operation[] = [
     fields: {},
   },
   {
-    name: "Get applause ranking of users by their ids (Doesnt work on web tester due to missing list addition)",
-    endpoint: "/api/applause/ranking",
-    method: "GET",
-    fields: { users: { user1: "input", user2: "input", user3: "input" } },
-  },
-  {
-    name: "Add value to your applause counter",
-    endpoint: "/api/applause/add",
-    method: "PATCH",
-    fields: { value: "input" },
-  },
-  {
-    name: "Remove value from your applause counter (must be negative)",
-    endpoint: "/api/applause/remove",
-    method: "PATCH",
-    fields: { value: "input" },
-  },
-  {
     name: "List an opportunity by id (leave empty for all)",
     endpoint: "/api/opportunities/id/:id",
     method: "GET",
@@ -427,10 +409,10 @@ const operations: operation[] = [
     fields: { _id: "input" },
   },
   {
-    name: "Initialize a queue for an opportunity by its id (doesn't work on this tester due to queue needing an array but works in general)",
+    name: "Initialize a queue for an opportunity by its id",
     endpoint: "/api/queue",
     method: "POST",
-    fields: { queueFor: "input", queue: "input", timePerPerson: "input", startTime: "input" },
+    fields: { queueFor: "input", timePerPerson: "input", startTime: "input" },
   },
   {
     name: "Get your estimated audition start time (for actor who applied)",
@@ -457,7 +439,7 @@ const operations: operation[] = [
     fields: {},
   },
   {
-    name: "Update your account types (doesnt work here, needs array)",
+    name: "Update your account types (seperate types with ', '. Valid types are admin, casting director, and actor)",
     endpoint: "/api/restrictions",
     method: "PATCH",
     fields: { accountTypes: "input" },
