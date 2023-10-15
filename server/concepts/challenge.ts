@@ -1,12 +1,11 @@
 import { ObjectId } from "mongodb";
 
 import DocCollection, { BaseDoc } from "../framework/doc";
-import { NotAllowedError, NotFoundError } from "./errors";
+import { NotAllowedError } from "./errors";
 
 export interface ChallengeDoc extends BaseDoc {
   challenger: ObjectId;
   prompt: string;
-  numAccepted: number;
 }
 
 export default class ChallengeConcept {
@@ -20,8 +19,7 @@ export default class ChallengeConcept {
    * @returns an object containing a success message and the proposed challenge object
    */
   async propose(challenger: ObjectId, prompt: string) {
-    const numAccepted = 0;
-    const _id = await this.proposed.createOne({ challenger, prompt, numAccepted });
+    const _id = await this.proposed.createOne({ challenger, prompt });
     return { msg: "Challenge Proposal successfully created!", proposed: await this.proposed.readOne({ _id }) };
   }
 
@@ -46,7 +44,7 @@ export default class ChallengeConcept {
    * Randomly selects a challenge from the selection of proposed ones that haven't
    * been posted yet.
    * @returns an object containing a success message and the posted challenge object
-   * @throws NoProposedChallenges if there are no proposed challenges yet
+   * @throws NotAllowedError if there are no proposed challenges yet
    */
   async randomlyPostOne() {
     const allProposals = await this.proposed.readMany({});
@@ -54,40 +52,12 @@ export default class ChallengeConcept {
     if (numProposals !== 0) {
       const randomlySelected = allProposals[Math.floor(Math.random() * numProposals)];
       const proposedId = randomlySelected._id;
-      const numAccepted = 0;
       const challenger = randomlySelected.challenger;
       const prompt = randomlySelected.prompt;
-      const postedId = await this.posted.createOne({ challenger, prompt, numAccepted });
+      const postedId = await this.posted.createOne({ challenger, prompt });
       await this.proposed.deleteOne({ _id: proposedId });
       return { msg: "Challenge successfully posted!", posted: await this.posted.readOne({ _id: postedId }) };
     }
-    throw new NoProposedChallenges();
-  }
-
-  /**
-   * Updates the number of people who have participated in the challenge
-   * @param _id id of the challenge being accepted or cancelled
-   * @param value 1 if challenge is being accepted or -1 if acceptance is cancelled
-   */
-  async updateChallengeCount(_id: ObjectId, value: number) {
-    const challenge = await this.posted.readOne({ _id });
-    if (challenge) {
-      const numAccepted = Math.max(0, challenge.numAccepted + value);
-      await this.posted.updateOne({ _id }, { numAccepted }); // HERE (Might be incorrect)
-      return { msg: "Challenge count updated successfully, count is: ", numAccepted };
-    }
-    throw new ChallengeNotFound(_id);
-  }
-}
-
-export class ChallengeNotFound extends NotFoundError {
-  constructor(public readonly _id: ObjectId) {
-    super("{0} is not an existing challenge!", _id);
-  }
-}
-
-export class NoProposedChallenges extends NotAllowedError {
-  constructor() {
-    super("No proposed challenges to select from!");
+    throw new NotAllowedError("No proposed challenges to select from!");
   }
 }

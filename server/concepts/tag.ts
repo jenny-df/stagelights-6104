@@ -1,4 +1,4 @@
-import { Filter, ObjectId } from "mongodb";
+import { ObjectId } from "mongodb";
 
 import DocCollection, { BaseDoc } from "../framework/doc";
 import { BadValuesError, NotAllowedError, NotFoundError } from "./errors";
@@ -13,7 +13,7 @@ export default class TagConcept {
   public readonly tags = new DocCollection<TagDoc>("tags");
 
   /**
-   * New tag
+   * Creates a new tag
    * @param tagger id of the user tagging
    * @param tagged id of the user tagged
    * @param post id of the post tag is on
@@ -31,7 +31,12 @@ export default class TagConcept {
    * @returns tag objects which belong to a given post
    */
   async getByPost(post: ObjectId) {
-    return await this.getTags({ post });
+    return await this.tags.readMany(
+      { post },
+      {
+        sort: { dateUpdated: -1 },
+      },
+    );
   }
 
   /**
@@ -40,29 +45,23 @@ export default class TagConcept {
    * @returns tag objects which belong to a given user
    */
   async getByTagged(tagged: ObjectId) {
-    return await this.getTags({ tagged });
+    return await this.tags.readMany(
+      { tagged },
+      {
+        sort: { dateUpdated: -1 },
+      },
+    );
   }
 
   /**
-   * Removes a given tag
-   * @param user id of the user trying to delete tag
-   * @param tagged id of tagged user
-   * @param post id of post
+   * Deletes a tag if the post exists and the user deleting is the tagger
+   * @param user id of the user deleting
+   * @param tagged id of the tagged user
+   * @param post id of the post containing the tag
    * @returns an object containing a success message
-   * @throws Bad
+   * @throws BadValuesError if no tag object exists for tagged user on post
    */
-  async delete(user: ObjectId, tagged: ObjectId, post: ObjectId) {
-    return await this.deleteTag(user, tagged, post);
-  }
-
-  private async tagExists(tagged: ObjectId, post: ObjectId) {
-    const tag = await this.tags.readOne({ tagged, post });
-    if (tag) {
-      throw new NotAllowedError("can't duplicate a tag");
-    }
-  }
-
-  private async deleteTag(user: ObjectId, tagged: ObjectId, post: ObjectId) {
+  async deleteTag(user: ObjectId, tagged: ObjectId, post: ObjectId) {
     const tagId = (await this.tags.readOne({ tagged, post }))?._id;
     if (tagId) {
       await this.isTagger(tagId, user);
@@ -70,6 +69,41 @@ export default class TagConcept {
       return { msg: "Tag deleted successfully!" };
     }
     throw new BadValuesError("Tag doesn't exist");
+  }
+
+  /**
+   * Removes all tags by and for a user
+   * @param user id of the user trying to delete tag
+   * @returns an object containing a success message
+   */
+  async deleteUser(user: ObjectId) {
+    await this.tags.deleteMany({
+      $or: [{ tagged: user }, { tagger: user }],
+    });
+    return { msg: "Tags deleted successfully!" };
+  }
+
+  /**
+   * Removes all tags for a given post
+   * @param user id of the user trying to delete tag
+   * @returns an object containing a success message
+   */
+  async deletePost(post: ObjectId) {
+    await this.tags.deleteMany({ post });
+    return { msg: "Tags deleted successfully!" };
+  }
+
+  /**
+   * Checks if a given post already has a tag for given user
+   * @param tagged id of the user being tagged
+   * @param post id of the post we're checking
+   * @throws DuplicatedTagError if the user is already tagged in the given post
+   */
+  private async tagExists(tagged: ObjectId, post: ObjectId) {
+    const tag = await this.tags.readOne({ tagged, post });
+    if (tag) {
+      throw new DuplicatedTagError(tagged, post);
+    }
   }
 
   /**
@@ -85,28 +119,25 @@ export default class TagConcept {
       throw new NotFoundError(`Tag ${_id} does not exist!`);
     }
     if (tag.tagger.toString() !== user.toString()) {
-      throw new TaggerNotMatchError(user, _id);
+      throw new TaggerNotMatchError(user, tag.post);
     }
-  }
-
-  /**
-   * Get tags based on a query specified
-   * @param query the filtering query to find the tags
-   * @returns all tags that are produced by the filtering
-   */
-  private async getTags(query: Filter<TagDoc>) {
-    const tags = await this.tags.readMany(query, {
-      sort: { dateUpdated: -1 },
-    });
-    return tags;
   }
 }
 
 export class TaggerNotMatchError extends NotAllowedError {
   constructor(
     public readonly user: ObjectId,
-    public readonly _id: ObjectId,
+    public readonly post: ObjectId,
   ) {
-    super("{0} is not the tagger of {1}!", user, _id);
+    super("{0} is not the tagger for the following post: {1}!", user, post);
+  }
+}
+
+export class DuplicatedTagError extends NotAllowedError {
+  constructor(
+    public readonly user: ObjectId,
+    public readonly post: ObjectId,
+  ) {
+    super("{0} is already tagged in the following post: {1}!", user, post);
   }
 }

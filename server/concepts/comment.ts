@@ -30,13 +30,12 @@ export default class CommentConcept {
    * @returns comment objects that belong to the parent given
    */
   async getByParent(parent: ObjectId) {
-    const comments = await this.comments.readMany(
+    return await this.comments.readMany(
       { parent },
       {
         sort: { dateUpdated: -1 },
       },
     );
-    return comments;
   }
 
   /**
@@ -65,11 +64,9 @@ export default class CommentConcept {
 
   /**
    * Deletes a comment
-   * @param _id id of comment
+   * @param _id id of a comment
    * @param user id of user trying to delete comment
    * @returns an object containing a success message
-   * @throws NotFoundError if the comment doesn't exist
-   * @throws CommentAuthorNotMatchError if the user isn't the author comment
    */
   async delete(_id: ObjectId, user: ObjectId) {
     await this.isAuthor(user, _id);
@@ -77,6 +74,24 @@ export default class CommentConcept {
     return { msg: "Comment deleted successfully!" };
   }
 
+  /**
+   * Deletes all comments for a given user
+   * @param user id of user
+   * @returns an object containing a success message
+   */
+  async deleteUserComments(user: ObjectId) {
+    await this.comments.deleteMany({ user });
+    return { msg: "Comment deleted successfully!" };
+  }
+
+  /**
+   * Checks if a given user is the author of a given comment
+   * @param user id of the user we're checking
+   * @param _id id of the comment
+   * @returns comment object if it belong to the user and is found
+   * @throws NotFoundError if the comment id doesn't belong to a comment
+   * @throws CommentAuthorNotMatchError if the user isn't the author
+   */
   private async isAuthor(user: ObjectId, _id: ObjectId) {
     const comment = await this.comments.readOne({ _id });
     if (!comment) {
@@ -85,6 +100,7 @@ export default class CommentConcept {
     if (comment.author.toString() !== user.toString()) {
       throw new CommentAuthorNotMatchError(user, _id);
     }
+    return comment;
   }
 }
 

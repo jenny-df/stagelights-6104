@@ -31,7 +31,6 @@ export default class ConnectionConcept {
    * @param from user id who's sending request
    * @param to user id who's being requested for a connection
    * @returns an object with a success message
-   * @throws ConnectionRequestAlreadyExistsError if users are already connected
    */
   async sendRequest(from: ObjectId, to: ObjectId) {
     await this.canSendRequest(from, to);
@@ -69,7 +68,6 @@ export default class ConnectionConcept {
    * @param from user id who sent request
    * @param to user id who was requested
    * @returns an object with a success message
-   * @throws ConnectionRequestNotFoundError if the connection request doesn't exist
    */
   async removeRequest(from: ObjectId, to: ObjectId) {
     await this.removePendingRequest(from, to);
@@ -79,7 +77,7 @@ export default class ConnectionConcept {
   /**
    * Removes a connection if it exists
    * @param user user id removing the connection
-   * @param connection_id user id being removed as a connection
+   * @param user2 user id being removed as a connection
    * @returns an object containing a success message
    * @throws ConnectionNotFoundError if the connection doesn't exist
    */
@@ -105,7 +103,6 @@ export default class ConnectionConcept {
     const connections = await this.connection.readMany({
       $or: [{ user1: user }, { user2: user }],
     });
-    // Making sure to compare ObjectId using toString()
     return connections.map((connection) => (connection.user1.toString() === user.toString() ? connection.user2 : connection.user1));
   }
 
@@ -126,7 +123,7 @@ export default class ConnectionConcept {
    */
   private async removePendingRequest(from: ObjectId, to: ObjectId) {
     const request = await this.requests.popOne({ from, to, status: "pending" });
-    if (request === null) {
+    if (!request) {
       throw new ConnectionRequestNotFoundError(from, to);
     }
   }

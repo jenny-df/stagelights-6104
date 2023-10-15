@@ -6,7 +6,7 @@ import { BadValuesError, NotAllowedError, NotFoundError } from "./errors";
 export interface FocusedPostDoc extends BaseDoc {
   author: ObjectId;
   content: string;
-  media: ObjectId;
+  media: ObjectId[];
   category: ObjectId;
 }
 
@@ -26,10 +26,8 @@ export default class FocusedPostConcept {
    * @param media media in the post
    * @param category id of focused category
    * @returns an object containing a success message and focused post object
-   * @throws NotFoundError if the category isn't found
    */
-  async create(author: ObjectId, content: string, media: ObjectId, category: ObjectId) {
-    await this.checkCategory(category);
+  async create(author: ObjectId, content: string, media: ObjectId[], category: ObjectId) {
     await this.verifyCategory(content, category);
     const _id = await this.posts.createOne({ author, content, media, category });
     return { msg: "Focused post successfully created!", post: await this.posts.readOne({ _id }) };
@@ -41,10 +39,9 @@ export default class FocusedPostConcept {
    * @returns posts that passed the filter
    */
   async getFocusedPosts(query: Filter<FocusedPostDoc>) {
-    const posts = await this.posts.readMany(query, {
+    return await this.posts.readMany(query, {
       sort: { dateUpdated: -1 },
     });
-    return posts;
   }
 
   /**
@@ -67,55 +64,57 @@ export default class FocusedPostConcept {
     if (post) {
       return post;
     }
-    throw new BadValuesError("Post doesn't exist");
+    throw new BadValuesError("Post with id {0} doesn't exist", _id);
   }
 
   /**
    * Finds a post by id and verifies if it was posted by the person given
    * @param _id id of the post
-   * @param author id of the potential author
+   * @param user id of the potential author
    * @returns post that has that id
-   * @throws BadValuesError if no post exists with that id
-   * @throws NotFoundError if the post's author isn't the one given
    */
-  async getAndVerify(_id: ObjectId, author: ObjectId) {
-    const post = await this.posts.readOne({ _id });
-    if (post) {
-      if (post.author.toString() == author.toString()) {
-        return post;
-      }
-      throw new NotFoundError("Post's author isn't the one given");
-    }
-    throw new BadValuesError("Post doesn't exist");
+  async getAndVerify(_id: ObjectId, user: ObjectId) {
+    return await this.isAuthor(user, _id);
   }
 
   /**
    * Updates information about a post
    * @param _id id of a post
    * @param update the new information of the post
-   * @param userId id of the user updating the post
+   * @param user id of the user updating the post
    * @returns an object containing a success message
-   * @throws NotFoundError if post doesn't exist
-   * @throws FocusedPostAuthorNotMatchError if user isn't author
    */
-  async update(_id: ObjectId, update: Partial<FocusedPostDoc>, userId: ObjectId) {
-    await this.isAuthor(userId, _id);
+  async update(_id: ObjectId, update: Partial<FocusedPostDoc>, user: ObjectId) {
+    const post = await this.isAuthor(user, _id);
     this.sanitizeUpdate(update);
-    await this.checkUpdatedCategory(update);
+    if (update.category && update.content) {
+      await this.verifyCategory(update.content, update.category);
+    } else if (update.category) {
+      await this.verifyCategory(post.content, update.category);
+    } else if (update.content) {
+      await this.verifyCategory(update.content, post.category);
+    }
     await this.posts.updateOne({ _id }, update);
     return { msg: "Focused post successfully updated!" };
   }
 
   /**
+   * Gets all the media for a post by id
+   * @param _id id of the focused post
+   * @returns the media for a given post if it exists
+   */
+  async getMediaById(_id: ObjectId) {
+    return (await this.getById(_id)).media;
+  }
+
+  /**
    * Deletes a given post if the user is that author
    * @param _id id of a post
-   * @param userId id of user trying to delete post
+   * @param user id of user trying to delete post
    * @returns an object containing a success message
-   * @throws NotFoundError if post doesn't exist
-   * @throws FocusedPostAuthorNotMatchError if user isn't author
    */
-  async delete(_id: ObjectId, userId: ObjectId) {
-    await this.isAuthor(userId, _id);
+  async delete(_id: ObjectId, user: ObjectId) {
+    await this.isAuthor(user, _id);
     await this.posts.deleteOne({ _id });
     return { msg: "Focused post deleted successfully!" };
   }
@@ -132,11 +131,9 @@ export default class FocusedPostConcept {
    * Finds a category object given category's 'id
    * @param _id id of the category
    * @returns category object
-   * @throws NotFoundError if the category isn't found
    */
   async getCategory(_id: ObjectId) {
-    await this.checkCategory(_id);
-    return await this.categories.readOne({ _id });
+    return await this.doesntExist(_id);
   }
 
   /**
@@ -144,19 +141,39 @@ export default class FocusedPostConcept {
    * @param name name of category
    * @param description description on what the category means
    * @returns an object containing a success message and category object
-   * @throws NotAllowedError if the category is found
    */
   async createCategory(name: string, description: string) {
-    this.validCategory(name, description);
-    await this.checkNotCategory(name);
+    await this.validCategory(name, description);
     const _id = await this.categories.createOne({ name, description });
     return { msg: "Category successfully created!", category: await this.categories.readOne({ _id }) };
+  }
+
+  /**
+   * Deletes a given category and all its posts
+   * @param _id id of the category
+   * @returns a success message
+   */
+  async deleteCategory(_id: ObjectId) {
+    await this.categories.deleteOne({ _id });
+    await this.posts.deleteMany({ category: _id });
+    return { msg: "successfully deleted category and its posts" };
+  }
+
+  /**
+   * Deletes all a users posts
+   * @param user id of the user
+   * @returns a success message
+   */
+  async deleteUser(user: ObjectId) {
+    await this.posts.deleteMany({ user });
+    return { msg: "successfully deleted all user's posts" };
   }
 
   /**
    * Checks if a user is the author of a post
    * @param user id of user that we're checking
    * @param _id id of a post
+   * @returns focused post object if found and is for the given user
    * @throws NotFoundError if post doesn't exist
    * @throws FocusedPostAuthorNotMatchError if user isn't author
    */
@@ -168,6 +185,7 @@ export default class FocusedPostConcept {
     if (post.author.toString() !== user.toString()) {
       throw new FocusedPostAuthorNotMatchError(user, _id);
     }
+    return post;
   }
 
   /**
@@ -175,44 +193,39 @@ export default class FocusedPostConcept {
    * @param _id id of the category
    * @throws NotFoundError if the category isn't found
    */
-  private async checkCategory(_id: ObjectId) {
+  private async doesntExist(_id: ObjectId) {
     const found = await this.categories.readOne({ _id });
     if (!found) {
       throw new NotFoundError(`'${_id}' category not found`);
     }
-  }
-
-  private async checkUpdatedCategory(update: Partial<FocusedPostDoc>) {
-    if (update.category) {
-      await this.checkCategory(update.category);
-    }
+    return found;
   }
 
   /**
-   * Checks if a given category already exists
-   * @param _id id of the category
-   * @throws NotAllowedError if the category is found
+   * Checks if the new category parameters contain text and if we're duplicating a
+   * category name
+   * @param name the name of the new category
+   * @param description the description of the new category
+   * @throws NotAllowedError if one or both are left empty or if the name already exists
    */
-  private async checkNotCategory(name: string) {
+  private async validCategory(name: string, description: string) {
+    if (!(name && description)) {
+      throw new NotAllowedError("Name or description of category missing");
+    }
     const found = await this.categories.readOne({ name });
     if (found) {
       throw new NotAllowedError(`'${name}' category already exists`);
     }
   }
 
-  private validCategory(name: string, description: string) {
-    if (!(name && description)) {
-      throw new NotAllowedError("Name or description of category missing");
-    }
-  }
-
   /**
-   *
+   * Verifies the content and category of a new post
    * @param content text of a post
    * @param category category given to the post
-   * @throws NotAllowedError if the text doesn't match the category
+   * @throws NotAllowedError if the content or category are left empty
    */
   private async verifyCategory(content: string, category: ObjectId) {
+    await this.doesntExist(category);
     // HERE (Need a way to verify that the content belongs to the content)
     if (content && category) {
       return;
@@ -226,8 +239,7 @@ export default class FocusedPostConcept {
    * @throws NotAllowedError if trying to update a readonly field
    */
   private sanitizeUpdate(update: Partial<FocusedPostDoc>) {
-    // Make sure the update cannot change the author.
-    const allowedUpdates = ["content", "media", "category"];
+    const allowedUpdates = ["content", "category"];
     for (const key in update) {
       if (!allowedUpdates.includes(key)) {
         throw new NotAllowedError(`Cannot update '${key}' field!`);

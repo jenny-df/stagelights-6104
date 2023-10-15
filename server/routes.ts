@@ -2,10 +2,11 @@ import { ObjectId } from "mongodb";
 
 import { Router, getExpressRouter } from "./framework/router";
 
-import { Applause, Challenge, Comment, Connection, FocusedPost, Opportunity, Tag, User, WebSession } from "./app";
+import { Applause, Application, Challenge, Comment, Connection, FocusedPost, Media, Opportunity, Portfolio, Tag, User, WebSession } from "./app";
+import { FocusedPostDoc } from "./concepts/focusedPost";
 import { OpportunityDoc, Requirements } from "./concepts/opportunity";
-import { FocusedPostDoc } from "./concepts/post";
-import { UserDoc, UserInfoDoc } from "./concepts/user";
+import { PortfolioDoc, ProfessionalInfo, Style } from "./concepts/portfolio";
+import { UserDoc } from "./concepts/user";
 import { WebSessionDoc } from "./concepts/websession";
 import Responses from "./responses";
 class Routes {
@@ -36,20 +37,35 @@ class Routes {
   }
 
   @Router.post("/users")
-  async createUser(session: WebSessionDoc, email: string, password: string, name: string, information: UserInfoDoc) {
+  async createUser(session: WebSessionDoc, email: string, password: string, name: string, profilePic: string, birthday: Date, city: string, state: string, country: string) {
     WebSession.isLoggedOut(session);
-    const createdUser = await User.create(email, password, name, information);
+    const createdUser = await User.create(email, password, name, birthday, city, state, country);
+
     if (createdUser.user) {
-      await Applause.initialize(createdUser.user._id);
-      // await AppHours.initialize()
+      const id = createdUser.user._id;
+      await Applause.initialize(id);
+      let media;
+      try {
+        media = await Media.create(id, profilePic);
+      } catch {
+        media = await Media.create(id, "https://drive.google.com/file/d/1ElQWXRMeOdkWTpujerxmYhSNqFuKOEyB/preview");
+      }
+      await User.update(id, { profilePic: media });
+
+      // await AppHours.initialize();
     }
 
     return createdUser;
   }
 
   @Router.patch("/users")
-  async updateUser(session: WebSessionDoc, update: Partial<UserDoc>) {
+  async updateUser(session: WebSessionDoc, update: Partial<UserDoc>, profilePic?: string) {
     const user = WebSession.getUser(session);
+    if (profilePic) {
+      const newMedia = await Media.create(user, profilePic);
+      const oldProfilePic = await User.updateProfilePic(user, newMedia);
+      await Media.delete(oldProfilePic);
+    }
     return await User.update(user, update);
   }
 
@@ -83,8 +99,10 @@ class Routes {
   }
 
   @Router.post("/focusedPosts")
-  async createPost(session: WebSessionDoc, content: string, media: ObjectId, category: ObjectId) {
+  async createPost(session: WebSessionDoc, content: string, mediaURLs: string, category: ObjectId) {
     const user = WebSession.getUser(session);
+    const mediaSeperated = mediaURLs.split(", ");
+    const media = await Promise.all(mediaSeperated.map(async (url) => await Media.create(user, url)));
     const created = await FocusedPost.create(user, content, media, category);
     return { msg: created.msg, post: await Responses.post(created.post) };
   }
@@ -98,6 +116,8 @@ class Routes {
   @Router.delete("/focusedPosts/:_id")
   async deletePost(session: WebSessionDoc, _id: ObjectId) {
     const user = WebSession.getUser(session);
+    const media = await FocusedPost.getMediaById(_id);
+    await Promise.all(media.map(async (id) => await Media.delete(id)));
     return await FocusedPost.delete(_id, user);
   }
 
@@ -109,6 +129,11 @@ class Routes {
   @Router.post("/categories")
   async addCategory(name: string, description: string) {
     return await FocusedPost.createCategory(name, description);
+  }
+
+  @Router.delete("/categories")
+  async deleteCategory(id: ObjectId) {
+    return await FocusedPost.deleteCategory(new ObjectId(id));
   }
 
   /////////////////////////////////////////CONNECTIONS//////////////////////////////////////////////
@@ -350,41 +375,85 @@ class Routes {
     return await Opportunity.delete(_id, user);
   }
 
-  /////////////////////////////////////////APP HOURS//////////////////////////////////////////////
-
-  // @Router.patch("/apphours/settings")
-  // async editAppHoursSettings(totalTime: number, minTime: number, divisions: AppCategoriesDoc[]) {
-  //   return null;
-  // }
-
-  // @Router.patch("/apphours")
-  // async editAppHours(session: WebSessionDoc, timeDivision: HourDivision[]) {
-  //   return null;
-  // }
-
   /////////////////////////////////////////APPLICATION//////////////////////////////////////////////
 
-  // @Router.post("/application")
-  // async initializeQueue(user: WebSessionDoc, portflio: ObjectId, text: string, media: ObjectId) {
-  //   return null;
-  // }
+  @Router.get("/application/opportunity")
+  async getOpApplications(session: WebSessionDoc, opId: ObjectId) {
+    const user = WebSession.getUser(session);
+    return await Responses.applications(await Application.getAppsForOp(user, opId));
+  }
 
-  // @Router.patch("/application/:_id")
-  // async updateStatus(_id: ObjectId, newStatus: string) {
-  //   return null;
-  // }
+  @Router.get("/application")
+  async getUserApplications(session: WebSessionDoc) {
+    const user = WebSession.getUser(session);
+    return await Responses.applications(await Application.getAppsForUser(user));
+  }
+
+  @Router.get("/application/:_id")
+  async getApplication(session: WebSessionDoc, _id: ObjectId) {
+    const user = WebSession.getUser(session);
+    return await Responses.application(await Application.getAppById(_id, user));
+  }
+
+  @Router.post("/application")
+  async createApplication(session: WebSessionDoc, text: string, media: string, opId: ObjectId) {
+    const user = WebSession.getUser(session);
+    const mediaURLs = media.split(", ");
+    const mediaCreated = await Promise.all(mediaURLs.map(async (url) => await Media.create(user, url)));
+    const owner = (await Opportunity.getById(opId))?.user ?? new ObjectId();
+    const response = await Application.create(owner, user, text, mediaCreated, opId);
+    return { msg: response.msg, application: await Responses.application(response.application) };
+  }
+
+  @Router.patch("/application")
+  async updateStatus(session: WebSessionDoc, id: ObjectId, newStatus: "rejected" | "approved" | "audition" | "withdrawn") {
+    const user = WebSession.getUser(session);
+    await Application.changeStatus(user, id, newStatus);
+    return { msg: "status changed successfully" };
+  }
 
   /////////////////////////////////////////PORTFOLIO//////////////////////////////////////////////
 
-  // @Router.post("/portfolio")
-  // async initializePortfolio(session: WebSessionDoc, style: Style, info: ProfessionalInfo, media: ObjectId[], intro: string) {
-  //   return null;
-  // }
+  @Router.get("/portfolio")
+  async getUserPortfolio(userId: ObjectId) {
+    return await Portfolio.getPortfolioByUser(new ObjectId(userId));
+  }
 
-  // @Router.patch("/portfolio")
-  // async editPortfolio(session: WebSessionDoc, update: Partial<PortfolioDoc>) {
-  //   return null;
-  // }
+  @Router.post("/portfolio")
+  async initializePortfolio(session: WebSessionDoc, style: Style, info: ProfessionalInfo, media: string, intro: string, heatshot: string) {
+    const user = WebSession.getUser(session);
+    const mediaURLs = media.split(", ");
+    const mediaCreated = await Promise.all(mediaURLs.map(async (url) => await Media.create(user, url)));
+    const headShotCreated = await Media.create(user, heatshot);
+    const response = await Portfolio.create(user, style, intro, info, mediaCreated, headShotCreated);
+    return { msg: response.msg, portfolio: await Responses.portfolio(response.portfolio) };
+  }
+
+  @Router.patch("/portfolio")
+  async editPortfolio(session: WebSessionDoc, update: Partial<PortfolioDoc>) {
+    const user = WebSession.getUser(session);
+    return await Portfolio.update(user, update);
+  }
+
+  @Router.patch("/portfolio/media/add")
+  async addPortfolioMedia(session: WebSessionDoc, media: string) {
+    const user = WebSession.getUser(session);
+    const mediaId = await Media.create(user, media);
+    return await Portfolio.addMedia(user, mediaId);
+  }
+
+  @Router.patch("/portfolio/media/remove")
+  async removePortfolioMedia(session: WebSessionDoc, media: ObjectId) {
+    const user = WebSession.getUser(session);
+    await Media.delete(media);
+    return await Portfolio.removeMedia(user, media);
+  }
+
+  @Router.delete("/portfolio")
+  async deletePortfolio(session: WebSessionDoc) {
+    const user = WebSession.getUser(session);
+    return await Portfolio.deleteUserPortfolio(user);
+  }
 
   /////////////////////////////////////////PRACTICE FOLDER//////////////////////////////////////////////
 

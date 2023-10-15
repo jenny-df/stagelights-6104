@@ -66,6 +66,12 @@ const operations: operation[] = [
     fields: {},
   },
   {
+    name: "Delete a category and all its posts",
+    endpoint: "/api/categories",
+    method: "DELETE",
+    fields: { id: "input" },
+  },
+  {
     name: "Get Focused Posts (empty for all)",
     endpoint: "/api/focusedPosts",
     method: "GET",
@@ -81,7 +87,7 @@ const operations: operation[] = [
     name: "Update Focused Post",
     endpoint: "/api/focusedPosts/:id",
     method: "PATCH",
-    fields: { id: "input", update: { content: "input", media: "input", category: "input" } },
+    fields: { id: "input", update: { content: "input", category: "input" } },
   },
   {
     name: "Delete Focused Post",
@@ -280,6 +286,30 @@ const operations: operation[] = [
     endpoint: "/api/opportunities/:id",
     method: "DELETE",
     fields: { id: "input" },
+  },
+  {
+    name: "Get all applications for an opportunity you own using its id",
+    endpoint: "/api/application/opportunity",
+    method: "GET",
+    fields: { opId: "input" },
+  },
+  {
+    name: "Get a specific application you submitted (empty for all)",
+    endpoint: "/api/application/:id",
+    method: "GET",
+    fields: { id: "input" },
+  },
+  {
+    name: "Create and submit an application (seperate media urls by a comma and a space)",
+    endpoint: "/api/application",
+    method: "POST",
+    fields: { portfolioId: "input", text: "input", media: "input", opId: "input" },
+  },
+  {
+    name: "Change the status for an opportunity (can change to withdraw if applier or to rejected, approved or audition if opportunity owner)",
+    endpoint: "/api/application",
+    method: "PATCH",
+    fields: { id: "input", newStatus: "input" },
   },
 ];
 

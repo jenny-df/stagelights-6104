@@ -2,19 +2,15 @@ import { ObjectId } from "mongodb";
 import DocCollection, { BaseDoc } from "../framework/doc";
 import { BadValuesError, NotAllowedError, NotFoundError } from "./errors";
 
-export interface UserInfoDoc {
-  birthday: Date;
-  address: string;
-  city: string;
-  state: string;
-  country: string;
-}
-
 export interface UserDoc extends BaseDoc {
   email: string;
   password: string;
   name: string;
-  information: UserInfoDoc;
+  profilePic: ObjectId;
+  birthday: Date;
+  city: string;
+  state: string;
+  country: string;
 }
 
 export default class UserConcept {
@@ -28,9 +24,10 @@ export default class UserConcept {
    * @param information general information on the user
    * @returns an object containing a success message and a user object
    */
-  async create(email: string, password: string, name: string, information: UserInfoDoc) {
+  async create(email: string, password: string, name: string, birthday: Date, city: string, state: string, country: string) {
     await this.canCreate(email, password);
-    const _id = await this.users.createOne({ email, password, name, information });
+    const tempProfilePic = new ObjectId();
+    const _id = await this.users.createOne({ email, password, name, profilePic: tempProfilePic, birthday, city, state, country });
     return { msg: "User created successfully!", user: await this.users.readOne({ _id }) };
   }
 
@@ -38,13 +35,9 @@ export default class UserConcept {
    * Finds a user by their id
    * @param _id id of user
    * @returns user information (without password)
-   * @throws NotFoundError if no user exists with the given id
    */
   async getUserById(_id: ObjectId) {
-    const user = await this.users.readOne({ _id });
-    if (user === null) {
-      throw new NotFoundError(`User not found!`);
-    }
+    const user = await this.userDoesntExist(_id);
     return this.sanitizeUser(user);
   }
 
@@ -52,13 +45,9 @@ export default class UserConcept {
    * Finds a user by their email
    * @param email email of user
    * @returns user information (without password)
-   * @throws NotFoundError if no user exists with the given email
    */
   async getUserByEmail(email: string) {
-    const user = await this.users.readOne({ email });
-    if (user === null) {
-      throw new NotFoundError(`User not found!`);
-    }
+    const user = await this.userEmailDoesntExist(email);
     return this.sanitizeUser(user);
   }
 
@@ -108,11 +97,24 @@ export default class UserConcept {
    * @returns an object containing a success message
    */
   async update(_id: ObjectId, update: Partial<UserDoc>) {
-    if (update.email !== undefined) {
+    this.sanitizeUpdate(update);
+    if (update.email) {
       await this.isEmailUnique(update.email);
     }
-    await this.users.updateOne({ _id }, update); // HERE (Update to allow change in info)
+    await this.users.updateOne({ _id }, update);
     return { msg: "User updated successfully!" };
+  }
+
+  /**
+   * Updates the profile picture for a given user
+   * @param _id id of user being updated
+   * @param profilePic new profile pic id for the user
+   * @returns the id of the old profile pic
+   */
+  async updateProfilePic(_id: ObjectId, profilePic: ObjectId) {
+    const oldProfilePic = (await this.userDoesntExist(_id)).profilePic;
+    await this.users.updateOne({ _id }, { profilePic });
+    return oldProfilePic;
   }
 
   /**
@@ -126,15 +128,31 @@ export default class UserConcept {
   }
 
   /**
-   * Checks if two users are the same (session same as user being changed)
-   * @param _id first user id
-   * @param _id2 second user id
-   * @throws NotAllowedError if the ids aren't the same
+   * Checks if the given email belongs to an existing user or not
+   * @param email email of user we're checking
+   * @returns user object if it exists
+   * @throws NotfoundError if the user isn't found
    */
-  private sameUser(_id: ObjectId, _id2: ObjectId) {
-    if (_id !== _id2) {
-      throw new NotAllowedError("Users are not the same");
+  private async userEmailDoesntExist(email: string) {
+    const user = await this.users.readOne({ email });
+    if (!user) {
+      throw new NotFoundError(`User not found!`);
     }
+    return user;
+  }
+
+  /**
+   * Checks if the given id belongs to an existing user or not
+   * @param _id id of user we're checking
+   * @returns user object if it exists
+   * @throws NotfoundError if the user isn't found
+   */
+  private async userDoesntExist(_id: ObjectId) {
+    const user = await this.users.readOne({ _id });
+    if (!user) {
+      throw new NotFoundError(`User not found!`);
+    }
+    return user;
   }
 
   /**
@@ -169,6 +187,20 @@ export default class UserConcept {
   private async isEmailUnique(email: string) {
     if (await this.users.readOne({ email })) {
       throw new NotAllowedError(`User with email ${email} already exists!`);
+    }
+  }
+
+  /**
+   * Sanitizes an update field
+   * @param update the new content that's being updated
+   * @throws NotAllowedError if trying to update a readonly field
+   */
+  private sanitizeUpdate(update: Partial<UserDoc>) {
+    const allowedUpdates = ["email", "password", "name", "city", "state", "country"];
+    for (const key in update) {
+      if (!allowedUpdates.includes(key)) {
+        throw new NotAllowedError(`Cannot update '${key}' field!`);
+      }
     }
   }
 }
