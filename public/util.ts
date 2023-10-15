@@ -18,10 +18,10 @@ const operations: operation[] = [
     fields: {},
   },
   {
-    name: "Create User",
+    name: "Create User (put google drive url for profile pic or leave empty)",
     endpoint: "/api/users",
     method: "POST",
-    fields: { email: "input", password: "input", name: "input", information: { birthday: "input", address: "input", city: "input", state: "input", country: "input" } },
+    fields: { email: "input", password: "input", name: "input", birthday: "input", profilePic: "input", city: "input", state: "input", country: "input", userType: "input" },
   },
   {
     name: "Login",
@@ -39,7 +39,7 @@ const operations: operation[] = [
     name: "Update User",
     endpoint: "/api/users",
     method: "PATCH",
-    fields: { update: { email: "input", password: "input", name: "input", information: { birthday: "input", address: "input", city: "input", state: "input", country: "input" } } },
+    fields: { update: { email: "input", password: "input", name: "input", birthday: "input", city: "input", state: "input", country: "input" }, profilePic: "input" },
   },
   {
     name: "Delete User",
@@ -60,10 +60,10 @@ const operations: operation[] = [
     fields: { name: "input", description: "input" },
   },
   {
-    name: "Get all Categories",
-    endpoint: "/api/categories",
+    name: "Get Category (or all if left empty)",
+    endpoint: "/api/categories/:id",
     method: "GET",
-    fields: {},
+    fields: { id: "input" },
   },
   {
     name: "Delete a category and all its posts",
@@ -72,16 +72,16 @@ const operations: operation[] = [
     fields: { id: "input" },
   },
   {
-    name: "Get Focused Posts (empty for all)",
+    name: "Get Focused Posts by author email or id (empty for all)",
     endpoint: "/api/focusedPosts",
     method: "GET",
-    fields: { authorEmail: "input" },
+    fields: { authorEmail: "input", _id: "input" },
   },
   {
-    name: "Create Focused Post",
+    name: "Create Focused Post (seperate google drive media by ', ')",
     endpoint: "/api/focusedPosts",
     method: "POST",
-    fields: { content: "input", media: "input", category: "input" },
+    fields: { content: "input", mediaURLs: "input", category: "input" },
   },
   {
     name: "Update Focused Post",
@@ -90,7 +90,7 @@ const operations: operation[] = [
     fields: { id: "input", update: { content: "input", category: "input" } },
   },
   {
-    name: "Delete Focused Post",
+    name: "Delete Focused Post (and all its tags)",
     endpoint: "/api/focusedPosts/:id",
     method: "DELETE",
     fields: { id: "input" },
@@ -142,6 +142,12 @@ const operations: operation[] = [
     endpoint: "/api/comments/post/:postId",
     method: "GET",
     fields: { postId: "input" },
+  },
+  {
+    name: "Get comment by id",
+    endpoint: "/api/comments",
+    method: "GET",
+    fields: { _id: "input" },
   },
   {
     name: "Add a comment by post id",
@@ -204,18 +210,6 @@ const operations: operation[] = [
     fields: {},
   },
   {
-    name: "Accept a challenge",
-    endpoint: "/api/challenges/accept/:id",
-    method: "PATCH",
-    fields: { id: "input" },
-  },
-  {
-    name: "Reject a challenge",
-    endpoint: "/api/challenges/reject/:id",
-    method: "PATCH",
-    fields: { id: "input" },
-  },
-  {
     name: "Get your own applause count",
     endpoint: "/api/applause",
     method: "GET",
@@ -226,7 +220,7 @@ const operations: operation[] = [
     endpoint: "/api/applause/ranking",
     method: "GET",
     fields: { users: { user1: "input", user2: "input", user3: "input" } },
-  }, // HERE (How do i do array??)
+  },
   {
     name: "Add value to your applause counter",
     endpoint: "/api/applause/add",
@@ -252,6 +246,12 @@ const operations: operation[] = [
     fields: { searched: "input" },
   },
   {
+    name: "List an opportunity by user",
+    endpoint: "/api/opportunities/user/:id",
+    method: "GET",
+    fields: { id: "input" },
+  },
+  {
     name: "See if an opportunity fits in date range (enter opportunity id, start date and end date)",
     endpoint: "/api/opportunities/inRange",
     method: "GET",
@@ -267,7 +267,7 @@ const operations: operation[] = [
     name: "Edit an existing opportunity",
     endpoint: "/api/opportunities",
     method: "PATCH",
-    fields: { id: "input", update: { title: "input", description: "input", startOn: "input", endsOn: "input", requirements: { physical: "input", skill: "input", location: "input" } } },
+    fields: { id: "input", update: { description: "input", startOn: "input", endsOn: "input" } },
   },
   {
     name: "Deactivate an opportunity by id",
@@ -294,10 +294,16 @@ const operations: operation[] = [
     fields: { opId: "input" },
   },
   {
-    name: "Get a specific application you submitted (empty for all)",
-    endpoint: "/api/application/:id",
+    name: "Get applications you submitted",
+    endpoint: "/api/application",
     method: "GET",
-    fields: { id: "input" },
+    fields: {},
+  },
+  {
+    name: "Get application by id",
+    endpoint: "/api/application/:_id",
+    method: "GET",
+    fields: { _id: "input" },
   },
   {
     name: "Create and submit an application (seperate media urls by a comma and a space)",
@@ -310,6 +316,175 @@ const operations: operation[] = [
     endpoint: "/api/application",
     method: "PATCH",
     fields: { id: "input", newStatus: "input" },
+  },
+  {
+    name: "Get user's portfolio",
+    endpoint: "/api/portfolio",
+    method: "GET",
+    fields: { userId: "input" },
+  },
+  {
+    name: "Create a portfolio (if actor type user)",
+    endpoint: "/api/portfolio",
+    method: "POST",
+    fields: {
+      style: { backgroundImage: "input", backGroundColor: "input", font: "input", textColor: "input" },
+      info: { education: "input", experience: "input", skills: "input", languages: "input" },
+      intro: "input",
+      media: "input",
+      headshot: "input",
+    },
+  },
+  {
+    name: "Update your portfolio",
+    endpoint: "/api/portfolio",
+    method: "PATCH",
+    fields: {
+      update: {
+        style: { backgroundImage: "input", backGroundColor: "input", font: "input", textColor: "input" },
+        info: { education: "input", experience: "input", skills: "input", languages: "input" },
+        intro: "input",
+        headshot: "input",
+      },
+    },
+  },
+  {
+    name: "Add media on portfolio (one google drive link)",
+    endpoint: "/api/portfolio/media/add",
+    method: "PATCH",
+    fields: { media: "input" },
+  },
+  {
+    name: "Remove media from portfolio (one google drive link)",
+    endpoint: "/api/portfolio/media/remove",
+    method: "PATCH",
+    fields: { media: "input" },
+  },
+  {
+    name: "Get your practice folder",
+    endpoint: "/api/practicefolder",
+    method: "GET",
+    fields: {},
+  },
+  {
+    name: "Add one url to practice folder",
+    endpoint: "/api/practicefolder/add",
+    method: "PATCH",
+    fields: { content: "input" },
+  },
+  {
+    name: "Remove one url from practice folder",
+    endpoint: "/api/practicefolder/remove",
+    method: "PATCH",
+    fields: { content: "input" },
+  },
+  {
+    name: "Get capacity limit for practice folders",
+    endpoint: "/api/practicefolder/settings",
+    method: "GET",
+    fields: {},
+  },
+  {
+    name: "Change the limit for practice folders (if admin)",
+    endpoint: "/api/practicefolder/settings",
+    method: "PATCH",
+    fields: { capacityLimit: "input" },
+  },
+  {
+    name: "Get repertoire folder by its id",
+    endpoint: "/api/repertoirefolders",
+    method: "GET",
+    fields: { _id: "input" },
+  },
+  {
+    name: "Get the repertiore folders for a given user by their id",
+    endpoint: "/api/repertoirefolders/:id",
+    method: "GET",
+    fields: { id: "input" },
+  },
+  {
+    name: "Create a new repertoire folder (if actor)",
+    endpoint: "/api/repertoirefolders",
+    method: "POST",
+    fields: { name: "input" },
+  },
+  {
+    name: "Add a media object (by its id) to your repertoire by its id",
+    endpoint: "/api/repertoirefolders/add",
+    method: "PATCH",
+    fields: { content: "input", folder: "input" },
+  },
+  {
+    name: "Remove a media object (by its id) from your repertoire by its id",
+    endpoint: "/api/repertoirefolders/remove",
+    method: "PATCH",
+    fields: { content: "input", folder: "input" },
+  },
+  {
+    name: "Delete a repertoire folder by its id",
+    endpoint: "/api/repertoirefolders",
+    method: "DELETE",
+    fields: { _id: "input" },
+  },
+  {
+    name: "Initialize a queue for an opportunity by its id (doesn't work on this tester due to queue needing an array but works in general)",
+    endpoint: "/api/queue",
+    method: "POST",
+    fields: { queueFor: "input", queue: "input", timePerPerson: "input", startTime: "input" },
+  },
+  {
+    name: "Get your estimated audition start time (for actor who applied)",
+    endpoint: "/api/queue/estimatedTime",
+    method: "GET",
+    fields: { queueFor: "input" },
+  },
+  {
+    name: "Move to next in queue (by queue's id)",
+    endpoint: "/api/queue",
+    method: "PATCH",
+    fields: { _id: "input" },
+  },
+  {
+    name: "Delete queue by id",
+    endpoint: "/api/queue",
+    method: "DELETE",
+    fields: { _id: "input" },
+  },
+  {
+    name: "Get your account types",
+    endpoint: "/api/restrictions",
+    method: "GET",
+    fields: {},
+  },
+  {
+    name: "Update your account types (doesnt work here, needs array)",
+    endpoint: "/api/restrictions",
+    method: "PATCH",
+    fields: { accountTypes: "input" },
+  },
+  {
+    name: "Get a posts votes by the post's id",
+    endpoint: "/api/vote",
+    method: "GET",
+    fields: { post: "input" },
+  },
+  {
+    name: "Upvote a post by its id",
+    endpoint: "/api/vote/upvote",
+    method: "POST",
+    fields: { post: "input" },
+  },
+  {
+    name: "Downvote a post by its id",
+    endpoint: "/api/vote/downvote",
+    method: "POST",
+    fields: { post: "input" },
+  },
+  {
+    name: "Delete a vote on a given post by the post's id",
+    endpoint: "/api/vote",
+    method: "DELETE",
+    fields: { post: "input" },
   },
 ];
 
