@@ -68,16 +68,6 @@ export default class FocusedPostConcept {
   }
 
   /**
-   * Finds a post by id and verifies if it was posted by the person given
-   * @param _id id of the post
-   * @param user id of the potential author
-   * @returns post that has that id
-   */
-  async getAndVerify(_id: ObjectId, user: ObjectId) {
-    return await this.isAuthor(user, _id);
-  }
-
-  /**
    * Updates information about a post
    * @param _id id of a post
    * @param update the new information of the post
@@ -125,6 +115,16 @@ export default class FocusedPostConcept {
    */
   async getAllCategories() {
     return await this.categories.readMany({});
+  }
+
+  /**
+   * Gets the post if it exists and the requester is the poster
+   * @param _id id of the post
+   * @param user id of the requester
+   * @returns the post if it exists and the requester is the poster
+   */
+  async getAndVerify(_id: ObjectId, user: ObjectId) {
+    return await this.isAuthor(user, _id);
   }
 
   /**

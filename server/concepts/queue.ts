@@ -79,11 +79,13 @@ export default class QueueConcept {
 
   /**
    * Deletes the queue for a given opportunity if it exists
+   * @param user id of user trying to delete
    * @param queueFor id of the opportunity it's creating a queue for
    * @returns an object containing a success message
    */
-  async delete(queueFor: ObjectId) {
-    await this.doesntExist(queueFor);
+  async delete(user: ObjectId, queueFor: ObjectId) {
+    const queue = await this.doesntExist(queueFor);
+    this.isManager(user, queue.queueManager);
     await this.queues.deleteOne({ queueFor });
     return { msg: "Queue successfully deleted!" };
   }

@@ -1,7 +1,7 @@
 import { ObjectId } from "mongodb";
 
 import DocCollection, { BaseDoc } from "../framework/doc";
-import { NotAllowedError } from "./errors";
+import { NotAllowedError, UnauthenticatedError } from "./errors";
 
 export interface RestrictionDoc extends BaseDoc {
   user: ObjectId;
@@ -53,6 +53,21 @@ export default class RestrictionConcept {
    */
   async isCastor(user: ObjectId) {
     return (await this.doesntExist(user)).castingDirPages;
+  }
+
+  /**
+   * Checks if a user has the requirements to access something
+   * @param item boolean indicating if user is of the type require
+   * @param type name of the type required
+   * @throws NotAllowedError if the user doesn't have the required type
+   */
+  check(item: boolean | undefined, type: string) {
+    if (item === undefined) {
+      throw new UnauthenticatedError("Must be logged in");
+    }
+    if (!item) {
+      throw new NotAllowedError("User isn't of type: {0}", type);
+    }
   }
 
   /**

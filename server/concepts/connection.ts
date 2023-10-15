@@ -107,6 +107,21 @@ export default class ConnectionConcept {
   }
 
   /**
+   * Removes all connections and requests for a user
+   * @param user user id removing the connection
+   * @returns an object containing a success message
+   */
+  async removeUser(user: ObjectId) {
+    await this.connection.deleteMany({
+      $or: [{ user1: user }, { user2: user }],
+    });
+    await this.requests.deleteMany({
+      $or: [{ to: user }, { from: user }],
+    });
+    return { msg: "Successfully removed connections and requests!" };
+  }
+
+  /**
    * Creates a connection between 2 users
    * @param user1 id of the first user
    * @param user2 id of the second user

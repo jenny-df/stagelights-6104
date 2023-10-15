@@ -25,19 +25,19 @@ export default class Responses {
    * Convert UserDoc into more readable format for the frontend by converting
    * the media id into a url.
    */
-  static async user(user: UserDoc | null) {
+  static async user(user: Partial<UserDoc> | null) {
     if (!user) {
       return user;
     }
-    const media = await this.oneMedia(user.profilePic);
+    const media = await this.oneMedia(user.profilePic ?? new ObjectId());
     return { ...user, profilePic: media };
   }
 
   /**
    * Same as {@link user} but for an array of UserDoc for improved performance.
    */
-  static async users(users: UserDoc[]) {
-    const mediaIds = users.map((user) => user.profilePic);
+  static async users(users: Partial<UserDoc>[]) {
+    const mediaIds = users.map((user) => user.profilePic ?? new ObjectId());
     const media = await this.media(mediaIds);
     return users.map((user, i) => ({ ...user, profilePic: media[i] }));
   }

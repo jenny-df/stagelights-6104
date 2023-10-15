@@ -2,13 +2,14 @@ import { ObjectId } from "mongodb";
 
 import { Router, getExpressRouter } from "./framework/router";
 
-import { Applause, Application, Challenge, Comment, Connection, FocusedPost, Media, Opportunity, Portfolio, Tag, User, WebSession } from "./app";
+import { Applause, Application, Challenge, Comment, Connection, FocusedPost, Folder, Media, Opportunity, Portfolio, Queue, Restrictions, Tag, User, Vote, WebSession } from "./app";
 import { FocusedPostDoc } from "./concepts/focusedPost";
 import { OpportunityDoc, Requirements } from "./concepts/opportunity";
 import { PortfolioDoc, ProfessionalInfo, Style } from "./concepts/portfolio";
 import { UserDoc } from "./concepts/user";
 import { WebSessionDoc } from "./concepts/websession";
 import Responses from "./responses";
+
 class Routes {
   /////////////////////////////////////////SESSIONS//////////////////////////////////////////////
 
@@ -26,24 +27,22 @@ class Routes {
 
   /////////////////////////////////////////USERS//////////////////////////////////////////////
 
-  @Router.get("/users")
-  async getUsers() {
-    return await User.getUsers();
-  }
-
   @Router.get("/users/:name")
-  async getUser(name: string) {
-    return await User.getUsers(name);
+  async getUser(name?: string) {
+    const users = await User.getUsers(name);
+    return await Responses.users(users);
   }
 
   @Router.post("/users")
-  async createUser(session: WebSessionDoc, email: string, password: string, name: string, profilePic: string, birthday: Date, city: string, state: string, country: string) {
+  async createUser(session: WebSessionDoc, email: string, password: string, name: string, profilePic: string, birthday: Date, city: string, state: string, country: string, userTypes: string[]) {
     WebSession.isLoggedOut(session);
     const createdUser = await User.create(email, password, name, birthday, city, state, country);
 
     if (createdUser.user) {
       const id = createdUser.user._id;
       await Applause.initialize(id);
+      await Folder.createPractice(id);
+      await Restrictions.create(id, userTypes);
       let media;
       try {
         media = await Media.create(id, profilePic);
@@ -51,8 +50,6 @@ class Routes {
         media = await Media.create(id, "https://drive.google.com/file/d/1ElQWXRMeOdkWTpujerxmYhSNqFuKOEyB/preview");
       }
       await User.update(id, { profilePic: media });
-
-      // await AppHours.initialize();
     }
 
     return createdUser;
@@ -62,8 +59,8 @@ class Routes {
   async updateUser(session: WebSessionDoc, update: Partial<UserDoc>, profilePic?: string) {
     const user = WebSession.getUser(session);
     if (profilePic) {
-      const newMedia = await Media.create(user, profilePic);
-      const oldProfilePic = await User.updateProfilePic(user, newMedia);
+      const newProfilePic = await Media.create(user, profilePic);
+      const oldProfilePic = await User.updateProfilePic(user, newProfilePic);
       await Media.delete(oldProfilePic);
     }
     return await User.update(user, update);
@@ -74,24 +71,42 @@ class Routes {
     const user = WebSession.getUser(session);
     WebSession.end(session);
     await Applause.delete(user);
+    await Application.withdrawUser(user);
+    await Comment.deleteUserComments(user);
+    await Connection.removeUser(user);
+    await FocusedPost.deleteUser(user);
+    await Folder.deleteUser(user);
+    await Media.deleteUser(user);
+    await Portfolio.delete(user);
+    await Opportunity.deactivateUser(user);
+    await Queue.deleteAllManagerQueues(user);
+    await Restrictions.delete(user);
+    await Vote.deleteUser(user);
+    await Tag.deleteUser(user);
+    await Restrictions.delete(user);
     return await User.delete(user);
   }
 
   @Router.post("/login")
   async logIn(session: WebSessionDoc, email: string, password: string) {
     const u = await User.authenticate(email, password);
-    WebSession.start(session, u._id);
+    const actor = await Restrictions.isActor(u._id);
+    const admin = await Restrictions.isAdmin(u._id);
+    const castor = await Restrictions.isCastor(u._id);
+    WebSession.start(session, u._id, actor, castor, admin);
     return { msg: "Logged in!" };
   }
 
   /////////////////////////////////////////FOCUSED POSTS//////////////////////////////////////////////
 
   @Router.get("/focusedPosts")
-  async getPosts(authorEmail?: string) {
+  async getPosts(authorEmail?: string, _id?: ObjectId) {
     let posts;
     if (authorEmail) {
       const id = (await User.getUserByEmail(authorEmail))._id;
       posts = await FocusedPost.getByAuthor(id);
+    } else if (_id) {
+      posts = [await FocusedPost.getById(new ObjectId(_id))];
     } else {
       posts = await FocusedPost.getFocusedPosts({});
     }
@@ -118,16 +133,22 @@ class Routes {
     const user = WebSession.getUser(session);
     const media = await FocusedPost.getMediaById(_id);
     await Promise.all(media.map(async (id) => await Media.delete(id)));
+    await Tag.deletePost(_id);
     return await FocusedPost.delete(_id, user);
   }
 
-  @Router.get("/categories")
-  async getCategories() {
+  @Router.get("/categories/:_id")
+  async getCategories(_id?: ObjectId) {
+    if (_id) {
+      return await FocusedPost.getCategory(_id);
+    }
     return await FocusedPost.getAllCategories();
   }
 
   @Router.post("/categories")
-  async addCategory(name: string, description: string) {
+  async addCategory(session: WebSessionDoc, name: string, description: string) {
+    const admin = WebSession.isAdmin(session);
+    Restrictions.check(admin, "admin");
     return await FocusedPost.createCategory(name, description);
   }
 
@@ -193,6 +214,12 @@ class Routes {
     return await Responses.comments(directComments);
   }
 
+  @Router.get("/comments")
+  async getComment(_id: ObjectId) {
+    const comment = await Comment.getComment(new ObjectId(_id));
+    return await Responses.comment(comment);
+  }
+
   @Router.post("/comments")
   async createComment(session: WebSessionDoc, post: ObjectId, content: string) {
     const user = WebSession.getUser(session);
@@ -231,6 +258,8 @@ class Routes {
 
   @Router.post("/tags")
   async createTag(session: WebSessionDoc, post: ObjectId, tagged: ObjectId) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
     const taggedId = (await User.getUserById(tagged))._id; // verify user
     const postId = (await FocusedPost.getAndVerify(post, user))._id; // verify post
@@ -240,10 +269,12 @@ class Routes {
 
   @Router.delete("/tags")
   async deleteTag(session: WebSessionDoc, post: ObjectId, tagged: ObjectId) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
     const taggedId = (await User.getUserById(tagged))._id; // verify user
     const postId = (await FocusedPost.getById(post))._id; // verify post
-    return await Tag.delete(user, taggedId, postId);
+    return await Tag.deleteTag(user, taggedId, postId);
   }
 
   /////////////////////////////////////////CHALLANGES//////////////////////////////////////////////
@@ -268,32 +299,27 @@ class Routes {
   }
 
   @Router.post("/challenges/post")
-  async postChallenge() {
-    // const user = WebSession.getUser(session); // HERE (make sure admin posting)
+  async postChallenge(session: WebSessionDoc) {
+    const admin = WebSession.isAdmin(session);
+    Restrictions.check(admin, "admin");
     const posted = await Challenge.randomlyPostOne();
     return { msg: posted.msg, challenge: await Responses.challenge(posted.posted) };
-  }
-
-  @Router.patch("/challenges/accept/:_id")
-  async acceptChallenge(_id: ObjectId) {
-    return await Challenge.updateChallengeCount(new ObjectId(_id), 1);
-  }
-
-  @Router.patch("/challenges/reject/:_id")
-  async rejectChallenge(_id: ObjectId) {
-    return await Challenge.updateChallengeCount(new ObjectId(_id), -1);
   }
 
   /////////////////////////////////////////APPLAUSE//////////////////////////////////////////////
 
   @Router.get("/applause")
   async getApplauseValue(session: WebSessionDoc) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
     return await Applause.getValueByUser(user);
   }
 
   @Router.get("/applause/ranking")
-  async rank(users: ObjectId[]) {
+  async rank(session: WebSessionDoc, users: ObjectId[]) {
+    const castor = WebSession.isCastor(session);
+    Restrictions.check(castor, "casting director");
     const userIds = await Promise.all(users.map(async (user) => (await User.getUserById(user))?._id)); // verify users
     const ranking = await Applause.rank(userIds);
     return Responses.applauses(ranking);
@@ -301,28 +327,30 @@ class Routes {
 
   @Router.patch("/applause/add")
   async addApplause(session: WebSessionDoc, value: number) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
     return await Applause.update(user, value);
   }
 
   @Router.patch("/applause/remove")
   async removeApplause(session: WebSessionDoc, value: number) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
     return await Applause.update(user, value);
   }
 
   /////////////////////////////////////////OPPORTUNITY//////////////////////////////////////////////
 
-  @Router.get("/opportunities/id")
-  async getOpportunities() {
+  @Router.get("/opportunities/id/:_id")
+  async getOpportunityById(_id?: ObjectId) {
+    if (_id) {
+      const opportunity = await Opportunity.getById(_id);
+      return await Responses.opportunity(opportunity);
+    }
     const opportunities = await Opportunity.getAll();
     return await Responses.opportunities(opportunities);
-  }
-
-  @Router.get("/opportunities/id/:_id")
-  async getOpportunityById(_id: ObjectId) {
-    const opportunity = await Opportunity.getById(_id);
-    return await Responses.opportunity(opportunity);
   }
 
   @Router.get("/opportunities/title/:searched")
@@ -331,8 +359,16 @@ class Routes {
     return await Responses.opportunities(opportunities);
   }
 
+  @Router.get("/opportunities/user/:_id")
+  async getOpportunitiesByUser(_id: ObjectId) {
+    const opportunities = await Opportunity.getByUser(_id);
+    return await Responses.opportunities(opportunities);
+  }
+
   @Router.get("/opportunities/inRange")
-  async opportunityInRange(id: ObjectId, start: Date, end: Date) {
+  async opportunityInRange(session: WebSessionDoc, id: ObjectId, start: Date, end: Date) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
     const startDate = new Date(start);
     const endDate = new Date(end);
     return await Opportunity.datesInRange(id, startDate, endDate);
@@ -340,6 +376,8 @@ class Routes {
 
   @Router.post("/opportunities")
   async createOpportunity(session: WebSessionDoc, title: string, description: string, startOn: Date, endsOn: Date, requirements: Requirements) {
+    const castor = WebSession.isCastor(session);
+    Restrictions.check(castor, "casting director");
     const user = WebSession.getUser(session);
     const startDate = new Date(startOn);
     const endDate = new Date(endsOn);
@@ -349,6 +387,8 @@ class Routes {
 
   @Router.patch("/opportunities")
   async updateOpportunity(session: WebSessionDoc, id: ObjectId, update: Partial<OpportunityDoc>) {
+    const castor = WebSession.isCastor(session);
+    Restrictions.check(castor, "casting director");
     const user = WebSession.getUser(session);
     return await Opportunity.update(id, user, update);
   }
@@ -356,6 +396,8 @@ class Routes {
   @Router.patch("/opportunities/deactivate/:_id")
   async deactivateOpportunity(_id: ObjectId, session?: WebSessionDoc) {
     if (session) {
+      const castor = WebSession.isCastor(session);
+      Restrictions.check(castor, "casting director");
       const user = WebSession.getUser(session);
       return await Opportunity.deactivate(_id, user);
     }
@@ -365,12 +407,16 @@ class Routes {
 
   @Router.patch("/opportunities/reactivate/:_id")
   async reactivateOpportunity(session: WebSessionDoc, _id: ObjectId) {
+    const castor = WebSession.isCastor(session);
+    Restrictions.check(castor, "casting director");
     const user = WebSession.getUser(session);
     return await Opportunity.reactivate(_id, user);
   }
 
   @Router.delete("/opportunities/:_id")
   async deleteOpportunity(session: WebSessionDoc, _id: ObjectId) {
+    const castor = WebSession.isCastor(session);
+    Restrictions.check(castor, "casting director");
     const user = WebSession.getUser(session);
     return await Opportunity.delete(_id, user);
   }
@@ -379,12 +425,16 @@ class Routes {
 
   @Router.get("/application/opportunity")
   async getOpApplications(session: WebSessionDoc, opId: ObjectId) {
+    const castor = WebSession.isCastor(session);
+    Restrictions.check(castor, "casting director");
     const user = WebSession.getUser(session);
     return await Responses.applications(await Application.getAppsForOp(user, opId));
   }
 
   @Router.get("/application")
   async getUserApplications(session: WebSessionDoc) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
     return await Responses.applications(await Application.getAppsForUser(user));
   }
@@ -397,6 +447,8 @@ class Routes {
 
   @Router.post("/application")
   async createApplication(session: WebSessionDoc, text: string, media: string, opId: ObjectId) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
     const mediaURLs = media.split(", ");
     const mediaCreated = await Promise.all(mediaURLs.map(async (url) => await Media.create(user, url)));
@@ -416,11 +468,13 @@ class Routes {
 
   @Router.get("/portfolio")
   async getUserPortfolio(userId: ObjectId) {
-    return await Portfolio.getPortfolioByUser(new ObjectId(userId));
+    return await Portfolio.getByUser(new ObjectId(userId));
   }
 
   @Router.post("/portfolio")
   async initializePortfolio(session: WebSessionDoc, style: Style, info: ProfessionalInfo, media: string, intro: string, heatshot: string) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
     const mediaURLs = media.split(", ");
     const mediaCreated = await Promise.all(mediaURLs.map(async (url) => await Media.create(user, url)));
@@ -431,12 +485,16 @@ class Routes {
 
   @Router.patch("/portfolio")
   async editPortfolio(session: WebSessionDoc, update: Partial<PortfolioDoc>) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
     return await Portfolio.update(user, update);
   }
 
   @Router.patch("/portfolio/media/add")
   async addPortfolioMedia(session: WebSessionDoc, media: string) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
     const mediaId = await Media.create(user, media);
     return await Portfolio.addMedia(user, mediaId);
@@ -444,83 +502,177 @@ class Routes {
 
   @Router.patch("/portfolio/media/remove")
   async removePortfolioMedia(session: WebSessionDoc, media: ObjectId) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
     await Media.delete(media);
     return await Portfolio.removeMedia(user, media);
   }
 
-  @Router.delete("/portfolio")
-  async deletePortfolio(session: WebSessionDoc) {
-    const user = WebSession.getUser(session);
-    return await Portfolio.deleteUserPortfolio(user);
-  }
-
   /////////////////////////////////////////PRACTICE FOLDER//////////////////////////////////////////////
 
-  // @Router.patch("/practicefolder/add")
-  // async addItem(session: WebSessionDoc, content: ObjectId[]) {
-  //   return null;
-  // }
+  @Router.get("/practicefolder")
+  async getPracticeFolder(session: WebSessionDoc) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
+    const user = WebSession.getUser(session);
+    return await Responses.folder(await Folder.getPractice(user));
+  }
 
-  // @Router.patch("/practicefolder/remove")
-  // async removeItem(session: WebSessionDoc, content: ObjectId[]) {
-  //   return null;
-  // }
+  @Router.patch("/practicefolder/add")
+  async addPracticeItem(session: WebSessionDoc, content: ObjectId) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
+    const user = WebSession.getUser(session);
+    return await Folder.addPractice(user, content);
+  }
 
-  // @Router.patch("/practicefolder/settings")
-  // async changeSettings(capacityLimit: number) {
-  //   return null;
-  // }
+  @Router.patch("/practicefolder/remove")
+  async removePracticeItem(session: WebSessionDoc, content: ObjectId) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
+    const user = WebSession.getUser(session);
+    return await Folder.removePractice(user, content);
+  }
+
+  @Router.get("/practicefolder/settings")
+  async getSettings() {
+    return Folder.getCapacity();
+  }
+
+  @Router.patch("/practicefolder/settings")
+  async changeSettings(session: WebSessionDoc, capacityLimit: number) {
+    const admin = WebSession.isAdmin(session);
+    Restrictions.check(admin, "admin");
+    Folder.changeCapacity(capacityLimit);
+    return { msg: "Successfully Changed Limit" };
+  }
+
+  /////////////////////////////////////////REPERTOIRE FOLDERS//////////////////////////////////////////////
+
+  @Router.get("/repertoirefolders")
+  async getRepertoireFolder(_id: ObjectId) {
+    return await Folder.getRepertoire(_id);
+  }
+
+  @Router.get("/repertoirefolders/:user")
+  async getUserRepertoires(user: ObjectId) {
+    return await Responses.folders(await Folder.getUserRepertoire(user));
+  }
+
+  @Router.post("/repertoirefolders")
+  async createRepertoireFolder(session: WebSessionDoc, name: string) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
+    const user = WebSession.getUser(session);
+    const created = await Folder.createRepertoire(user, name);
+    return { msg: created.msg, folder: await Responses.folder(created.folder) };
+  }
+
+  @Router.patch("/repertoirefolders/add")
+  async addRepertoireItem(session: WebSessionDoc, content: ObjectId, folder: ObjectId) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
+    const user = WebSession.getUser(session);
+    return await Folder.addRepertoire(user, folder, content);
+  }
+
+  @Router.patch("/repertoirefolders/remove")
+  async removeRepertoireItem(session: WebSessionDoc, content: ObjectId, folder: ObjectId) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
+    const user = WebSession.getUser(session);
+    return await Folder.removeRepertoire(user, folder, content);
+  }
+
+  @Router.delete("/repertoirefolders")
+  async deleteRepertoire(session: WebSessionDoc, _id: ObjectId) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
+    const user = WebSession.getUser(session);
+    return await Folder.deleteRepertoire(user, _id);
+  }
 
   /////////////////////////////////////////QUEUE//////////////////////////////////////////////
 
-  // @Router.post("/queue")
-  // async initializeQueue(user: WebSessionDoc, queue: ObjectId[], rankings: ObjectId[], timePerPerson: number, startTime: Date) {
-  //   return null;
-  // }
-  // @Router.patch("/queue")
-  // async nextInQueue(_id: ObjectId) {
-  //   return null;
-  // }
+  @Router.post("/queue")
+  async initializeQueue(session: WebSessionDoc, queueFor: ObjectId, queue: ObjectId[], timePerPerson: number, startTime: Date) {
+    const castor = WebSession.isCastor(session);
+    Restrictions.check(castor, "casting director");
+    const user = WebSession.getUser(session); // HERE ranking
+    const created = await Queue.create(user, queueFor, queue, new Date(startTime), timePerPerson);
+    return { msg: created.msg, queue: await Responses.queue(created.queue) };
+  }
+
+  @Router.get("/queue/estimatedTime")
+  async estimatedQueueTime(session: WebSessionDoc, queueFor: ObjectId) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
+    const user = WebSession.getUser(session);
+    return await Queue.getEstimatedTime(queueFor, user);
+  }
+
+  @Router.patch("/queue")
+  async nextInQueue(session: WebSessionDoc, _id: ObjectId) {
+    const castor = WebSession.isCastor(session);
+    Restrictions.check(castor, "casting director");
+    const user = WebSession.getUser(session); // HERE update to include info on applicant
+    const response = await Queue.progressQueue(user, _id);
+    return { next: (await User.getUserById(response.next)).name, current: (await User.getUserById(response.current)).name };
+  }
+
+  @Router.delete("/queue")
+  async deleteQueue(session: WebSessionDoc, _id: ObjectId) {
+    const castor = WebSession.isCastor(session);
+    Restrictions.check(castor, "casting director");
+    const user = WebSession.getUser(session);
+    return await Queue.delete(user, _id);
+  }
 
   /////////////////////////////////////////RESTRICTIONS//////////////////////////////////////////////
 
-  // @Router.get("/restrictions")
-  // async getAllowed(user: WebSessionDoc) {
-  //   return null;
-  // }
+  @Router.get("/restrictions")
+  async getAllowed(session: WebSessionDoc) {
+    const user = WebSession.getUser(session);
+    return await Restrictions.getAccountTypes(user);
+  }
 
-  // @Router.patch("/restrictions/general")
-  // async updateTypes(user: WebSessionDoc, accountTypes: string[]) {
-  //   return null;
-  // }
-
-  // @Router.patch("/restrictions/childToAdult")
-  // async childToAdult(user: WebSessionDoc) {
-  //   return null;
-  // }
+  @Router.patch("/restrictions")
+  async updateTypes(session: WebSessionDoc, accountTypes: string[]) {
+    const user = WebSession.getUser(session);
+    return await Restrictions.edit(user, accountTypes);
+  }
 
   /////////////////////////////////////////VOTE//////////////////////////////////////////////
 
-  // @Router.get("/vote/:post")
-  // async postVotes(post: ObjectId) {
-  //   return null;
-  // }
+  @Router.get("/vote")
+  async postVotes(post: ObjectId) {
+    return await Vote.votesForParent(new ObjectId(post));
+  }
 
-  // @Router.post("/vote/upvote")
-  // async upvote(user: WebSessionDoc, post: ObjectId) {
-  //   return null;
-  // }
+  @Router.post("/vote/upvote")
+  async upvote(session: WebSessionDoc, post: ObjectId) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
+    const user = WebSession.getUser(session);
+    return await Vote.vote(user, post, true);
+  }
 
-  // @Router.post("/vote/downvote")
-  // async downvote(user: WebSessionDoc, post: ObjectId) {
-  //   return null;
-  // }
+  @Router.post("/vote/downvote")
+  async downvote(session: WebSessionDoc, post: ObjectId) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
+    const user = WebSession.getUser(session);
+    return await Vote.vote(user, post, false);
+  }
 
-  // @Router.delete("/vote/:id")
-  // async deleteVote(_id: ObjectId) {
-  //   return null;
-  // }
+  @Router.delete("/vote")
+  async deleteVote(session: WebSessionDoc, post: ObjectId) {
+    const actor = WebSession.isActor(session);
+    Restrictions.check(actor, "actor");
+    const user = WebSession.getUser(session);
+    return await Vote.delete(user, post);
+  }
 
   /////////////////////////////////////////CATCH ALL//////////////////////////////////////////////
 
