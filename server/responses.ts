@@ -430,7 +430,7 @@ Router.registerError(NotOwnerError, async (e) => {
 
 Router.registerError(NotInFolderError, async (e) => {
   const media = await Responses.oneMedia(e.item);
-  return e.formatWith(media?.url);
+  return e.formatWith(media);
 });
 
 Router.registerError(NoPracticeFolderError, async (e) => {

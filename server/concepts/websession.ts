@@ -46,6 +46,19 @@ export default class WebSessionConcept {
   }
 
   /**
+   * Resets user types
+   * @param session session object
+   * @param actor is the user an actor
+   * @param castor is the user a casting director
+   * @param admin is the user an admin
+   */
+  resetTypes(session: WebSessionDoc, actor: boolean, admin: boolean, castor: boolean) {
+    session.actor = actor;
+    session.admin = admin;
+    session.castor = castor;
+  }
+
+  /**
    * Gets the id of the logged in user
    * @param session websession object for a given session
    * @returns the id of the user

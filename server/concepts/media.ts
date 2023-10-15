@@ -18,12 +18,15 @@ export default class MediaConcept {
    * @returns id of the new media object
    */
   async create(user: ObjectId, url: string) {
-    this.isNotGoogleDriveLink(url);
-    let edittedURL = url;
-    if (url.endsWith("view?usp=share_link")) {
-      edittedURL = edittedURL.replace("view?usp=share_link", "preview");
+    if (url) {
+      this.isNotGoogleDriveLink(url);
+      let edittedURL = url;
+      if (url.endsWith("view?usp=share_link")) {
+        edittedURL = edittedURL.replace("view?usp=share_link", "preview");
+      }
+      return await this.medias.createOne({ user, url: edittedURL });
     }
-    return await this.medias.createOne({ user, url: edittedURL });
+    throw new BadValuesError("can't leave url empty for media");
   }
 
   /**
@@ -41,7 +44,7 @@ export default class MediaConcept {
    * @returns array of URLs
    */
   async idsToURLs(ids: ObjectId[]) {
-    return await Promise.all(ids.map(async (id) => await this.doesntExists(id)));
+    return await Promise.all(ids.map(async (id) => (await this.doesntExists(id)).url));
   }
 
   /**

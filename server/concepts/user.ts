@@ -98,8 +98,10 @@ export default class UserConcept {
    */
   async update(_id: ObjectId, update: Partial<UserDoc>) {
     this.sanitizeUpdate(update);
-    if (update.email) {
-      await this.isEmailUnique(update.email);
+    if ("email" in update) {
+      if (update.email) {
+        await this.isEmailUnique(update.email);
+      }
     }
     await this.users.updateOne({ _id }, update);
     return { msg: "User updated successfully!" };

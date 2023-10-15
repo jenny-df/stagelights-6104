@@ -1,6 +1,7 @@
 import { ObjectId } from "mongodb";
 
 import DocCollection, { BaseDoc } from "../framework/doc";
+import { BadValuesError } from "./errors";
 
 export interface VoteDoc extends BaseDoc {
   upvote: boolean;
@@ -19,16 +20,19 @@ export default class VoteConcept {
    * @returns an object containing a message and whether the vote is new or not
    */
   async vote(user: ObjectId, parent: ObjectId, upvote: boolean) {
-    const vote = await this.votes.readOne({ user, parent });
-    if (vote) {
-      if (vote.upvote === upvote) {
-        return { msg: "vote already exists with the same value", new: false };
+    if (user && parent) {
+      const vote = await this.votes.readOne({ user, parent });
+      if (vote) {
+        if (vote.upvote === upvote) {
+          return { msg: "vote already exists with the same value", new: false };
+        }
+        await this.votes.updateOne({ user, parent }, { upvote });
+        return { msg: "vote value updated", new: false };
       }
-      await this.votes.updateOne({ user, parent }, { upvote });
-      return { msg: "vote value updated", new: false };
+      await this.votes.createOne({ user, upvote, parent });
+      return { msg: "Vote successfully created!", new: true };
     }
-    await this.votes.createOne({ user, upvote, parent });
-    return { msg: "Vote successfully created!", new: true };
+    throw new BadValuesError("there is a required field that's empty");
   }
 
   /**

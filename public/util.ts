@@ -49,7 +49,7 @@ const operations: operation[] = [
   },
   {
     name: "Get Users (empty for all)",
-    endpoint: "/api/users/:name",
+    endpoint: "/api/users",
     method: "GET",
     fields: { name: "input" },
   },
@@ -61,9 +61,9 @@ const operations: operation[] = [
   },
   {
     name: "Get Category (or all if left empty)",
-    endpoint: "/api/categories/:id",
+    endpoint: "/api/categories",
     method: "GET",
-    fields: { id: "input" },
+    fields: { _id: "input" },
   },
   {
     name: "Delete a category and all its posts",
@@ -91,7 +91,7 @@ const operations: operation[] = [
   },
   {
     name: "Delete Focused Post (and all its tags)",
-    endpoint: "/api/focusedPosts/:id",
+    endpoint: "/api/focusedPosts",
     method: "DELETE",
     fields: { id: "input" },
   },
@@ -159,7 +159,7 @@ const operations: operation[] = [
     name: "Edit a comment",
     endpoint: "/api/comments/:id",
     method: "PATCH",
-    fields: { id: "input", content: "input" },
+    fields: { id: "input", newContent: "input" },
   },
   {
     name: "Delete a comment",
@@ -192,12 +192,6 @@ const operations: operation[] = [
     fields: { post: "input", tagged: "input" },
   },
   {
-    name: "Get Challenges (leave empty for all)",
-    endpoint: "/api/challenges/:challengeId",
-    method: "GET",
-    fields: { challengeId: "input" },
-  },
-  {
     name: "Propose a Challenge",
     endpoint: "/api/challenges",
     method: "POST",
@@ -210,6 +204,12 @@ const operations: operation[] = [
     fields: {},
   },
   {
+    name: "Get posted Challenge by id (leave empty for all)",
+    endpoint: "/api/challenges",
+    method: "GET",
+    fields: { _id: "input" },
+  },
+  {
     name: "Get your own applause count",
     endpoint: "/api/applause",
     method: "GET",
@@ -217,9 +217,9 @@ const operations: operation[] = [
   },
   {
     name: "List an opportunity by id (leave empty for all)",
-    endpoint: "/api/opportunities/id/:id",
+    endpoint: "/api/opportunities/id",
     method: "GET",
-    fields: { id: "input" },
+    fields: { _id: "input" },
   },
   {
     name: "List an opportunity by title",
@@ -301,7 +301,7 @@ const operations: operation[] = [
   },
   {
     name: "Get user's portfolio",
-    endpoint: "/api/portfolio",
+    endpoint: "/api/portfolio/:userId",
     method: "GET",
     fields: { userId: "input" },
   },
@@ -355,7 +355,7 @@ const operations: operation[] = [
     fields: { content: "input" },
   },
   {
-    name: "Remove one url from practice folder",
+    name: "Remove one url (by media id) from practice folder",
     endpoint: "/api/practicefolder/remove",
     method: "PATCH",
     fields: { content: "input" },
@@ -391,7 +391,7 @@ const operations: operation[] = [
     fields: { name: "input" },
   },
   {
-    name: "Add a media object (by its id) to your repertoire by its id",
+    name: "Add a media object (by google drive url) to your repertoire by its id",
     endpoint: "/api/repertoirefolders/add",
     method: "PATCH",
     fields: { content: "input", folder: "input" },
@@ -421,13 +421,13 @@ const operations: operation[] = [
     fields: { queueFor: "input" },
   },
   {
-    name: "Move to next in queue (by queue's id)",
+    name: "Move to next in queue (by opportunity's id) and input the status of the previous canditate (approved/rejected) unless this is the first candidate",
     endpoint: "/api/queue",
     method: "PATCH",
-    fields: { _id: "input" },
+    fields: { _id: "input", newStatusPrev: "input" },
   },
   {
-    name: "Delete queue by id",
+    name: "Delete queue by opportunity id",
     endpoint: "/api/queue",
     method: "DELETE",
     fields: { _id: "input" },

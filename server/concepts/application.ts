@@ -27,6 +27,7 @@ export default class ApplicationConcept {
    */
   async create(owner: ObjectId, user: ObjectId, text: string, media: ObjectId[], applicationFor: ObjectId) {
     this.ownerIsApplier(owner, user);
+    await this.alreadyApplied(user, applicationFor);
     const status = "pending";
     const _id = await this.applications.createOne({ owner, user, status, text, media, applicationFor });
     return { msg: "Application successfully created!", application: await this.applications.readOne({ _id }) };
@@ -41,11 +42,14 @@ export default class ApplicationConcept {
    */
   async getAppsForOp(user: ObjectId, opId: ObjectId) {
     const applications = await this.applications.readMany({ applicationFor: opId, status: { $in: ["approved", "audition", "rejected", "pending"] } });
-    const owner = applications[0]?.owner ?? new ObjectId();
-    if (user.toString() === owner.toString()) {
-      return applications;
+    if (applications[0]) {
+      const owner = applications[0].owner ?? new ObjectId();
+      if (user.toString() === owner.toString()) {
+        return applications;
+      }
+      throw new NotAllowedError("Not owner of opportunity so can't access this information");
     }
-    throw new NotAllowedError("Not owner of opportunity so can't access this information");
+    throw new NotAllowedError("No applicants for this opportunity");
   }
 
   /**
@@ -55,6 +59,21 @@ export default class ApplicationConcept {
    */
   async getAppsForUser(userId: ObjectId) {
     return await this.applications.readMany({ user: userId });
+  }
+
+  /**
+   * Gets the application for a given opportunity that was submitted by a given user
+   * if it exists
+   * @param user id of the user who's application is being retreived
+   * @param opId id of the opportunity that the application is for
+   * @returns application object if it exits
+   */
+  async getAppByOpForUser(user: ObjectId, opId: ObjectId) {
+    const app = await this.applications.readOne({ user, applicationFor: opId });
+    if (app) {
+      return app._id;
+    }
+    throw new NotFoundError("no application found");
   }
 
   /**
@@ -69,7 +88,7 @@ export default class ApplicationConcept {
     const application = await this.doesntExist(_id);
     const owner = application?.owner.toString();
     const creator = application?.user.toString();
-    if (user.toString() in [owner, creator]) {
+    if (user.toString() === owner || user.toString() === creator) {
       return application;
     }
     throw new NotAllowedError("Not owner or applier. So can't view application");
@@ -77,6 +96,7 @@ export default class ApplicationConcept {
 
   /**
    * Changes the status of a given application
+   * @param user id of the user making the change
    * @param _id id of the application
    * @param newStatus updated status of application
    */
@@ -112,6 +132,19 @@ export default class ApplicationConcept {
   }
 
   /**
+   * Checks if the user has already applied to a given opportunity
+   * @param user id of the user
+   * @param opId id of the opportunity
+   * @throws NotAllowedError if the user has already applied
+   */
+  private async alreadyApplied(user: ObjectId, opId: ObjectId) {
+    const application = await this.applications.readOne({ user, applicationFor: opId });
+    if (application) {
+      throw new NotAllowedError("User already applied to job!");
+    }
+  }
+
+  /**
    * Checks if the status changes are valid and allowed
    * @param user id of user
    * @param newStatus new proposed status of application
@@ -125,7 +158,7 @@ export default class ApplicationConcept {
     if (newStatus == "withdrawn" && user.toString() !== applier) {
       throw new NotApplierError(user);
     }
-    if (newStatus in ["approved", "audition", "rejected"] && user.toString() !== owner) {
+    if ((newStatus === "approved" || newStatus === "audition" || newStatus === "rejected") && user.toString() !== owner) {
       throw new NotOwnerError(user, newStatus);
     }
   }

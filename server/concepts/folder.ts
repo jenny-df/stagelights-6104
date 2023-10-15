@@ -129,9 +129,13 @@ export default class FolderConcept {
    */
   async addPractice(user: ObjectId, item: ObjectId) {
     const practice = await this.doesntHavePracticeFolder(user);
-    practice.contents.push(item);
-    await this.practiceFolders.updateOne({ user }, { contents: practice.contents });
-    return { msg: "successfully added the item given" };
+
+    if (practice.numContents + 1 <= this.capacity) {
+      practice.contents.push(item);
+      await this.practiceFolders.updateOne({ user }, { contents: practice.contents, numContents: practice.numContents + 1 });
+      return { msg: "successfully added the item given" };
+    }
+    throw new NotAllowedError("Practice folder full! Remove before adding more");
   }
 
   /**
@@ -147,7 +151,7 @@ export default class FolderConcept {
     const index = stringContents.indexOf(item.toString());
     if (index !== -1) {
       const newContents = practice.contents.splice(index, 1);
-      await this.repertoireFolders.updateOne({ user }, { contents: newContents });
+      await this.practiceFolders.updateOne({ user }, { contents: newContents, numContents: practice.numContents - 1 });
       return { msg: "successfully removed the item given" };
     }
     throw new NotInFolderError(item);

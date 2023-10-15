@@ -16,7 +16,7 @@ class Routes {
   @Router.get("/session")
   async getSessionUser(session: WebSessionDoc) {
     const user = WebSession.getUser(session);
-    return await User.getUserById(user);
+    return await Responses.user(await User.getUserById(user));
   }
 
   @Router.post("/logout")
@@ -27,7 +27,7 @@ class Routes {
 
   /////////////////////////////////////////USERS//////////////////////////////////////////////
 
-  @Router.get("/users/:name")
+  @Router.get("/users")
   async getUser(name?: string) {
     const users = await User.getUsers(name);
     return await Responses.users(users);
@@ -42,17 +42,18 @@ class Routes {
       const id = createdUser.user._id;
       await Applause.initialize(id);
       await Folder.createPractice(id);
-      await Restrictions.create(id, [userType]);
+      const sepUserTypes = userType.split(", ");
+      await Restrictions.create(id, sepUserTypes);
       let media;
       try {
         media = await Media.create(id, profilePic);
       } catch {
         media = await Media.create(id, "https://drive.google.com/file/d/1ElQWXRMeOdkWTpujerxmYhSNqFuKOEyB/preview");
       }
-      await User.update(id, { profilePic: media });
+      await User.updateProfilePic(id, media);
+      const updatedUser = await User.getUserById(createdUser.user._id);
+      return { msg: createdUser.msg, user: await Responses.user(updatedUser) };
     }
-
-    return createdUser;
   }
 
   @Router.patch("/users")
@@ -63,7 +64,10 @@ class Routes {
       const oldProfilePic = await User.updateProfilePic(user, newProfilePic);
       await Media.delete(oldProfilePic);
     }
-    return await User.update(user, update);
+    if (update) {
+      await User.update(user, update);
+    }
+    return { msg: "Successfully updated user" };
   }
 
   @Router.delete("/users")
@@ -116,8 +120,11 @@ class Routes {
   @Router.post("/focusedPosts")
   async createPost(session: WebSessionDoc, content: string, mediaURLs: string, category: ObjectId) {
     const user = WebSession.getUser(session);
-    const mediaSeperated = mediaURLs.split(", ");
-    const media = await Promise.all(mediaSeperated.map(async (url) => await Media.create(user, url)));
+    let media: ObjectId[] = [];
+    if (mediaURLs) {
+      const mediaSeperated = mediaURLs.split(", ");
+      media = await Promise.all(mediaSeperated.map(async (url) => await Media.create(user, url)));
+    }
     const created = await FocusedPost.create(user, content, media, new ObjectId(category));
     await Applause.update(user, 3);
     return { msg: created.msg, post: await Responses.post(created.post) };
@@ -139,7 +146,7 @@ class Routes {
     return await FocusedPost.delete(new ObjectId(id), user);
   }
 
-  @Router.get("/categories/:_id")
+  @Router.get("/categories")
   async getCategories(_id?: ObjectId) {
     if (_id) {
       return await FocusedPost.getCategory(new ObjectId(_id));
@@ -291,8 +298,8 @@ class Routes {
 
   /////////////////////////////////////////CHALLANGES//////////////////////////////////////////////
 
-  @Router.get("/challenges/:_id")
-  async getSpecificChallenge(_id: ObjectId) {
+  @Router.get("/challenges")
+  async getSpecificChallenge(_id?: ObjectId) {
     if (_id) {
       const challenge = await Challenge.getPosted(new ObjectId(_id));
       return await Responses.challenge(challenge);
@@ -329,7 +336,7 @@ class Routes {
 
   /////////////////////////////////////////OPPORTUNITY//////////////////////////////////////////////
 
-  @Router.get("/opportunities/id/:_id")
+  @Router.get("/opportunities/id")
   async getOpportunityById(_id?: ObjectId) {
     if (_id) {
       const opportunity = await Opportunity.getById(new ObjectId(_id));
@@ -357,7 +364,10 @@ class Routes {
     Restrictions.check(actor, "actor");
     const startDate = new Date(start);
     const endDate = new Date(end);
-    return await Opportunity.datesInRange(new ObjectId(id), startDate, endDate);
+    if (id) {
+      return await Opportunity.datesInRange(new ObjectId(id), startDate, endDate);
+    }
+    return { msg: "no opportunity id given" };
   }
 
   @Router.post("/opportunities")
@@ -438,8 +448,12 @@ class Routes {
     const actor = WebSession.isActor(session);
     Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
-    const mediaURLs = media.split(", ");
-    const mediaCreated = await Promise.all(mediaURLs.map(async (url) => await Media.create(user, url)));
+    let mediaCreated: ObjectId[] = [];
+    if (media) {
+      const mediaURLs = media.split(", ");
+      mediaCreated = await Promise.all(mediaURLs.map(async (url) => await Media.create(user, url)));
+    }
+
     const owner = (await Opportunity.getById(new ObjectId(opId)))?.user ?? new ObjectId();
     const response = await Application.create(owner, user, text, mediaCreated, new ObjectId(opId));
     await Applause.update(user, 2);
@@ -458,19 +472,22 @@ class Routes {
 
   /////////////////////////////////////////PORTFOLIO//////////////////////////////////////////////
 
-  @Router.get("/portfolio")
+  @Router.get("/portfolio/:userId")
   async getUserPortfolio(userId: ObjectId) {
     return await Portfolio.getByUser(new ObjectId(userId));
   }
 
   @Router.post("/portfolio")
-  async initializePortfolio(session: WebSessionDoc, style: Style, info: ProfessionalInfo, media: string, intro: string, heatshot: string) {
+  async initializePortfolio(session: WebSessionDoc, style: Style, info: ProfessionalInfo, media: string, intro: string, headshot: string) {
     const actor = WebSession.isActor(session);
     Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
-    const mediaURLs = media.split(", ");
-    const mediaCreated = await Promise.all(mediaURLs.map(async (url) => await Media.create(user, url)));
-    const headShotCreated = await Media.create(user, heatshot);
+    let mediaCreated: ObjectId[] = [];
+    if (media) {
+      const mediaURLs = media.split(", ");
+      mediaCreated = await Promise.all(mediaURLs.map(async (url) => await Media.create(user, url)));
+    }
+    const headShotCreated = await Media.create(user, headshot);
     const response = await Portfolio.create(user, style, intro, info, mediaCreated, headShotCreated);
     await Applause.update(user, 5);
     return { msg: response.msg, portfolio: await Responses.portfolio(response.portfolio) };
@@ -515,11 +532,15 @@ class Routes {
   }
 
   @Router.patch("/practicefolder/add")
-  async addPracticeItem(session: WebSessionDoc, content: ObjectId) {
+  async addPracticeItem(session: WebSessionDoc, content: string) {
     const actor = WebSession.isActor(session);
     Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
-    return await Folder.addPractice(user, new ObjectId(content));
+    if (content) {
+      const media = await Media.create(user, content);
+      return await Folder.addPractice(user, media);
+    }
+    return { msg: "please enter a url in the content" };
   }
 
   @Router.patch("/practicefolder/remove")
@@ -547,7 +568,7 @@ class Routes {
 
   @Router.get("/repertoirefolders")
   async getRepertoireFolder(_id: ObjectId) {
-    return await Folder.getRepertoire(new ObjectId(_id));
+    return await Responses.folder(await Folder.getRepertoire(new ObjectId(_id)));
   }
 
   @Router.get("/repertoirefolders/:user")
@@ -560,17 +581,24 @@ class Routes {
     const actor = WebSession.isActor(session);
     Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
-    const created = await Folder.createRepertoire(user, name);
-    await Applause.update(user, 0.5);
-    return { msg: created.msg, folder: await Responses.folder(created.folder) };
+    if (name) {
+      const created = await Folder.createRepertoire(user, name);
+      await Applause.update(user, 0.5);
+      return { msg: created.msg, folder: await Responses.folder(created.folder) };
+    }
+    return { msg: "Repertoire folder needs a name" };
   }
 
   @Router.patch("/repertoirefolders/add")
-  async addRepertoireItem(session: WebSessionDoc, content: ObjectId, folder: ObjectId) {
+  async addRepertoireItem(session: WebSessionDoc, content: string, folder: ObjectId) {
     const actor = WebSession.isActor(session);
     Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
-    return await Folder.addRepertoire(user, new ObjectId(folder), new ObjectId(content));
+    if (content && folder) {
+      const media = await Media.create(user, content);
+      return await Folder.addRepertoire(user, new ObjectId(folder), media);
+    }
+    return { msg: "needs content url!" };
   }
 
   @Router.patch("/repertoirefolders/remove")
@@ -578,7 +606,10 @@ class Routes {
     const actor = WebSession.isActor(session);
     Restrictions.check(actor, "actor");
     const user = WebSession.getUser(session);
-    return await Folder.removeRepertoire(user, new ObjectId(folder), new ObjectId(content));
+    if (content && folder) {
+      return await Folder.removeRepertoire(user, new ObjectId(folder), new ObjectId(content));
+    }
+    return { msg: "missing content or folder" };
   }
 
   @Router.delete("/repertoirefolders")
@@ -614,12 +645,21 @@ class Routes {
   }
 
   @Router.patch("/queue")
-  async nextInQueue(session: WebSessionDoc, _id: ObjectId) {
+  async nextInQueue(session: WebSessionDoc, _id: ObjectId, newStatusPrev?: "approved" | "rejected") {
     const castor = WebSession.isCastor(session);
     Restrictions.check(castor, "casting director");
     const user = WebSession.getUser(session);
     const response = await Queue.progressQueue(user, new ObjectId(_id));
-    return { next: (await User.getUserById(response.next)).name, current: (await User.getUserById(response.current)).name };
+    const prevUser = response.prev;
+    if (newStatusPrev && prevUser) {
+      const applicationId = await Application.getAppByOpForUser(prevUser, new ObjectId(_id));
+      await Application.changeStatus(user, applicationId, newStatusPrev);
+    }
+    let next = "None";
+    if (response.next) {
+      next = (await User.getUserById(response.next)).name;
+    }
+    return { next: next, current: (await User.getUserById(response.current)).name };
   }
 
   @Router.delete("/queue")
@@ -642,7 +682,12 @@ class Routes {
   async updateTypes(session: WebSessionDoc, accountTypes: string) {
     const user = WebSession.getUser(session);
     const sepAccountTypes = accountTypes.split(", ");
-    return await Restrictions.edit(user, sepAccountTypes);
+    const msg = await Restrictions.edit(user, sepAccountTypes);
+    const actor = await Restrictions.isActor(user);
+    const admin = await Restrictions.isAdmin(user);
+    const castor = await Restrictions.isCastor(user);
+    WebSession.resetTypes(session, actor, admin, castor);
+    return msg;
   }
 
   /////////////////////////////////////////VOTE//////////////////////////////////////////////

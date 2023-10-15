@@ -72,9 +72,13 @@ export default class QueueConcept {
     }
     await this.queues.updateOne({ queueFor }, { currentPosition: newPosition });
 
+    let prevUser = undefined;
+    if (newPosition - 2 >= 0) {
+      prevUser = queue.queue[newPosition - 2];
+    }
     const current = queue.queue[newPosition - 1];
-    const nextQueued = queue.queue[newPosition] ?? null;
-    return { next: nextQueued, current: current };
+    const nextQueued = queue.queue[newPosition] ?? undefined;
+    return { next: nextQueued, current: current, prev: prevUser };
   }
 
   /**
@@ -147,7 +151,7 @@ export class DuplicateQueueError extends NotAllowedError {
 
 export class NoQueueError extends NotFoundError {
   constructor(public readonly opId: ObjectId) {
-    super("There is no queue for ", opId);
+    super("There is no queue for {0}", opId);
   }
 }
 
@@ -162,6 +166,6 @@ export class NotInQueueError extends NotAllowedError {
     public readonly user: ObjectId,
     public readonly opId: ObjectId,
   ) {
-    super("{0} is not in the queue for !", user, opId);
+    super("{0} is not in the queue for {1}!", user, opId);
   }
 }
