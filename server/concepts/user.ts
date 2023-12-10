@@ -64,6 +64,15 @@ export default class UserConcept {
   }
 
   /**
+   * Gets user info from their ids
+   * @param ids ids of users we're getting the info for
+   * @returns an array containing users' info
+   */
+  async idsToUsers(ids: ObjectId[]) {
+    return await this.users.readMany({ _id: { $in: ids } });
+  }
+
+  /**
    * Retrieves all users or users with a given name
    * @param name name being searched
    * @returns user objects that have that name or all users if no name is indicated

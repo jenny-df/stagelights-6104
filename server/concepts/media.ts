@@ -20,10 +20,7 @@ export default class MediaConcept {
   async create(user: ObjectId, url: string) {
     if (url) {
       this.isNotGoogleDriveLink(url);
-      let edittedURL = url;
-      if (url.endsWith("view?usp=share_link")) {
-        edittedURL = edittedURL.replace("view?usp=share_link", "preview");
-      }
+      const edittedURL = url.replace(/(\/view)[^]*$/g, "/preview");
       return await this.medias.createOne({ user, url: edittedURL });
     }
     throw new BadValuesError("can't leave url empty for media");

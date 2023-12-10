@@ -41,12 +41,28 @@ export default class ChallengeConcept {
   }
 
   /**
+   * Finds todays challenge. If not found, posts one at random
+   * @returns today's challenge object
+   */
+  async todaysChallenge() {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const now = new Date();
+
+    const postedToday = await this.posted.readOne({ dateCreated: { $gte: start, $lt: now } });
+    if (postedToday) {
+      return postedToday;
+    }
+    return (await this.randomlyPostOne()).posted;
+  }
+
+  /**
    * Randomly selects a challenge from the selection of proposed ones that haven't
    * been posted yet.
    * @returns an object containing a success message and the posted challenge object
    * @throws NotAllowedError if there are no proposed challenges yet
    */
-  async randomlyPostOne() {
+  private async randomlyPostOne() {
     const allProposals = await this.proposed.readMany({});
     const numProposals = allProposals.length;
     if (numProposals !== 0) {

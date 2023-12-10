@@ -9,7 +9,7 @@ export interface PraticeFolderDoc extends FolderDoc {
 
 export interface FolderDoc extends BaseDoc {
   user: ObjectId;
-  contents: ObjectId[];
+  contents: string[];
   name: string;
 }
 
@@ -25,7 +25,7 @@ export default class FolderConcept {
    * @returns an object containing a success message and the new folder object
    */
   async createRepertoire(user: ObjectId, name: string) {
-    const contents: ObjectId[] = [];
+    const contents: string[] = [];
     const _id = await this.repertoireFolders.createOne({ user, contents, name });
     return { msg: "Repertoire Folder successfully created!", folder: await this.repertoireFolders.readOne({ _id }) };
   }
@@ -34,31 +34,34 @@ export default class FolderConcept {
    * Adds an item to a given repertoire folder if it belongs to the user given
    * @param user id of the user deleting
    * @param folder id of the repertoire folder being modified
-   * @param item id of item being added
+   * @param item url string
    * @returns an object containing a success message
    */
-  async addRepertoire(user: ObjectId, folder: ObjectId, item: ObjectId) {
+  async addRepertoire(user: ObjectId, folder: ObjectId, item: string) {
     const repertoire = await this.repertoireFolderFinder(user, folder);
-    repertoire.contents.push(item);
-    await this.repertoireFolders.updateOne({ _id: folder }, { contents: repertoire.contents });
-    return { msg: "successfully added the item given" };
+    if (!repertoire.contents.includes(item)) {
+      repertoire.contents.push(item);
+      await this.repertoireFolders.updateOne({ _id: folder }, { contents: repertoire.contents });
+      return { msg: "successfully added the item given" };
+    }
+    throw new NotAllowedError("{0} already exists in this folder", item);
   }
 
   /**
    * Removes an item from a given repertoire folder if it belongs to the user given
    * @param user id of the user
    * @param folder id of the repertoire folder being modified
-   * @param item id of item being removed
+   * @param item url string being removed
    * @returns an object containing a success message
    * @throws NotInFolderError if the item isn't in the folder given
    */
-  async removeRepertoire(user: ObjectId, folder: ObjectId, item: ObjectId) {
+  async removeRepertoire(user: ObjectId, folder: ObjectId, item: string) {
     const repertoire = await this.repertoireFolderFinder(user, folder);
     const stringContents = repertoire.contents.map((id) => id.toString());
     const index = stringContents.indexOf(item.toString());
     if (index !== -1) {
-      const newContents = repertoire.contents.splice(index, 1);
-      await this.repertoireFolders.updateOne({ _id: folder }, { contents: newContents });
+      repertoire.contents.splice(index, 1);
+      await this.repertoireFolders.updateOne({ _id: folder }, { contents: repertoire.contents });
       return { msg: "successfully removed the item given" };
     }
     throw new NotInFolderError(item);
@@ -124,16 +127,19 @@ export default class FolderConcept {
   /**
    * Adds a given item to the user's practice folder
    * @param user id of the user
-   * @param item id of item being removed
+   * @param item url string being added
    * @returns an object containing a success message
    */
-  async addPractice(user: ObjectId, item: ObjectId) {
+  async addPractice(user: ObjectId, item: string) {
     const practice = await this.doesntHavePracticeFolder(user);
 
     if (practice.numContents + 1 <= this.capacity) {
-      practice.contents.push(item);
-      await this.practiceFolders.updateOne({ user }, { contents: practice.contents, numContents: practice.numContents + 1 });
-      return { msg: "successfully added the item given" };
+      if (!practice.contents.includes(item)) {
+        practice.contents.push(item);
+        await this.practiceFolders.updateOne({ user }, { contents: practice.contents, numContents: practice.numContents + 1 });
+        return { msg: "successfully added the item given" };
+      }
+      throw new NotAllowedError("{0} already exists in this folder", item);
     }
     throw new NotAllowedError("Practice folder full! Remove before adding more");
   }
@@ -141,17 +147,17 @@ export default class FolderConcept {
   /**
    * Removes a given item from the user's practice folder if it exists
    * @param user id of the user
-   * @param item id of item being removed
+   * @param item url string being removed
    * @returns an object containing a success message
    * @throws NotInFolderError if the item doesn't exist in the user's pratice folder
    */
-  async removePractice(user: ObjectId, item: ObjectId) {
+  async removePractice(user: ObjectId, item: string) {
     const practice = await this.doesntHavePracticeFolder(user);
-    const stringContents = practice.contents.map((id) => id.toString());
-    const index = stringContents.indexOf(item.toString());
+    const stringContents = practice.contents;
+    const index = stringContents.indexOf(item);
     if (index !== -1) {
-      const newContents = practice.contents.splice(index, 1);
-      await this.practiceFolders.updateOne({ user }, { contents: newContents, numContents: practice.numContents - 1 });
+      practice.contents.splice(index, 1);
+      await this.practiceFolders.updateOne({ user }, { contents: practice.contents, numContents: practice.numContents - 1 });
       return { msg: "successfully removed the item given" };
     }
     throw new NotInFolderError(item);
@@ -225,7 +231,7 @@ export default class FolderConcept {
 }
 
 export class NotInFolderError extends NotFoundError {
-  constructor(public readonly item: ObjectId) {
+  constructor(public readonly item: string) {
     super("{0} doesn't exist in the contents of the folder given", item);
   }
 }

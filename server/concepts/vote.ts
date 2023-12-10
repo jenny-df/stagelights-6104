@@ -13,24 +13,36 @@ export default class VoteConcept {
   public readonly votes = new DocCollection<VoteDoc>("votes");
 
   /**
-   * Creates a vote if it doesn't exist and updates it if it does
+   * Creates a vote if it doesn't exist and updates or deletes it if it does
    * @param user id of the user deleting
    * @param parent id of the parent post/comment that has the vote
    * @param upvote if the vote is an upvote or not
-   * @returns an object containing a message and whether the vote is new or not
+   * @returns an object containing a message and the applause change
    */
   async vote(user: ObjectId, parent: ObjectId, upvote: boolean) {
     if (user && parent) {
       const vote = await this.votes.readOne({ user, parent });
+      let applause = 0.5;
+
       if (vote) {
         if (vote.upvote === upvote) {
-          return { msg: "vote already exists with the same value", new: false };
+          await this.delete(user, parent);
+          if (upvote) {
+            applause = -0.5; // cancel perks from upvote
+          }
+          return { applausePoints: applause, msg: "vote removed" };
         }
         await this.votes.updateOne({ user, parent }, { upvote });
-        return { msg: "vote value updated", new: false };
+        if (!upvote) {
+          applause = -0.5; // deduct applause for downvote
+        }
+        return { applausePoints: applause * 2, msg: "vote value updated" }; // double to undo previous vote
       }
       await this.votes.createOne({ user, upvote, parent });
-      return { msg: "Vote successfully created!", new: true };
+      if (!upvote) {
+        applause = -0.5; // deduct applause for downvote
+      }
+      return { applausePoints: applause, msg: "Vote successfully created!" };
     }
     throw new BadValuesError("there is a required field that's empty");
   }
@@ -59,7 +71,7 @@ export default class VoteConcept {
    * @param parent id of the parent post/comment that has the vote
    * @returns an object containing a success message
    */
-  async delete(user: ObjectId, parent: ObjectId) {
+  private async delete(user: ObjectId, parent: ObjectId) {
     await this.votes.deleteOne({ user, parent });
     return { msg: "Vote successfully deleted!" };
   }

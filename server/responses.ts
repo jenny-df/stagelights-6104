@@ -6,7 +6,7 @@ import { ChallengeDoc } from "./concepts/challenge";
 import { CommentAuthorNotMatchError, CommentDoc } from "./concepts/comment";
 import { AlreadyConnectedError, ConnectionDoc, ConnectionNotFoundError, ConnectionRequestAlreadyExistsError, ConnectionRequestDoc, ConnectionRequestNotFoundError } from "./concepts/connection";
 import { FocusedPostAuthorNotMatchError, FocusedPostDoc } from "./concepts/focusedPost";
-import { FolderDoc, HasPracticeFolderError, NoPracticeFolderError, NotFolderOwnerError, NotInFolderError, PraticeFolderDoc } from "./concepts/folder";
+import { FolderDoc, HasPracticeFolderError, NoPracticeFolderError, NotFolderOwnerError, PraticeFolderDoc } from "./concepts/folder";
 import { NotOpportunityOwnerError, OpportunityDoc } from "./concepts/opportunity";
 import { HasPortfolioError, NoPortfolioError, PortfolioDoc } from "./concepts/portfolio";
 import { DuplicateQueueError, NoQueueError, NotInQueueError, NotManagerError, QueueDoc } from "./concepts/queue";
@@ -222,9 +222,9 @@ export default class Responses {
     if (!portfolio) {
       return portfolio;
     }
-    const user = (await User.getUserById(portfolio.user)).name;
+    const user = await User.getUserById(portfolio.user);
     const headshot = await this.oneMedia(portfolio.headshot);
-    const media = await this.media(portfolio.media);
+    const media = await Promise.all(portfolio.media.map(async (media) => await Media.getMediaById(media)));
     return { ...portfolio, user, headshot, media };
   }
 
@@ -232,32 +232,30 @@ export default class Responses {
    * Same as {@link portfolio} but for an array of PortfolioDoc for improved performance.
    */
   static async portfolios(portfolios: PortfolioDoc[]) {
-    const users = await User.idsToNames(portfolios.map((portfolio) => portfolio.user));
+    const users = await Promise.all(portfolios.map(async (portfolio) => await User.getUserById(portfolio.user)));
     const headshots = await Promise.all(portfolios.map(async (portfolio) => await this.oneMedia(portfolio.headshot)));
-    const media = await Promise.all(portfolios.map(async (portfolio) => await this.media(portfolio.media)));
+    const media = await Promise.all(portfolios.map(async (portfolio) => await Promise.all(portfolio.media.map(async (media) => await Media.getMediaById(media)))));
     return portfolios.map((portfolio, i) => ({ ...portfolio, user: users[i], headshot: headshots[i], media: media[i] }));
   }
 
   /**
    * Convert FolderDoc into more readable format for the frontend by converting
-   * the user id into a name and content ids to urls.
+   * the user id into a name.
    */
   static async folder(folder: FolderDoc | PraticeFolderDoc | null) {
     if (!folder) {
       return folder;
     }
-    const user = (await User.getUserById(folder.user)).name;
-    const contents = await this.media(folder.contents);
-    return { ...folder, user, contents };
+    const user = await User.getUserById(folder.user);
+    return { ...folder, user };
   }
 
   /**
    * Same as {@link folder} but for an array of FolderDoc for improved performance.
    */
   static async folders(folders: FolderDoc[] | PraticeFolderDoc[]) {
-    const users = await User.idsToNames(folders.map((folder) => folder.user));
-    const contents = await Promise.all(folders.map(async (folder) => await this.media(folder.contents)));
-    return folders.map((folder, i) => ({ ...folder, user: users[i], contents: contents[i] }));
+    const users = await Promise.all(folders.map(async (folder) => await User.getUserById(folder.user)));
+    return folders.map((folder, i) => ({ ...folder, user: users[i] }));
   }
 
   /**
@@ -332,10 +330,10 @@ export default class Responses {
    */
   static async connectionRequests(requests: ConnectionRequestDoc[]) {
     const from = requests.map((request) => request.from);
-    const fromNames = await User.idsToNames(from);
+    const fromUsers = await User.idsToUsers(from);
     const to = requests.map((request) => request.to);
-    const toNames = await User.idsToNames(to);
-    return requests.map((request, i) => ({ ...request, from: fromNames[i], to: toNames[i] }));
+    const toUsers = await User.idsToUsers(to);
+    return requests.map((request, i) => ({ ...request, from: fromUsers[i], to: toUsers[i] }));
   }
 
   /**
@@ -344,10 +342,10 @@ export default class Responses {
    */
   static async connection(connections: ConnectionDoc[]) {
     const user1 = connections.map((request) => request.user1);
-    const user1Names = await User.idsToNames(user1);
+    const user1Users = await User.idsToUsers(user1);
     const user2 = connections.map((request) => request.user2);
-    const user2Names = await User.idsToNames(user2);
-    return connections.map((connection, i) => ({ ...connection, user1: user1Names[i], user2: user2Names[i] }));
+    const user2Users = await User.idsToUsers(user2);
+    return connections.map((connection, i) => ({ ...connection, user1: user1Users[i], user2: user2Users[i] }));
   }
 }
 
@@ -427,11 +425,6 @@ Router.registerError(NotOwnerError, async (e) => {
 });
 
 // folder
-
-Router.registerError(NotInFolderError, async (e) => {
-  const media = await Responses.oneMedia(e.item);
-  return e.formatWith(media);
-});
 
 Router.registerError(NoPracticeFolderError, async (e) => {
   const user = await User.getUserById(e.user);

@@ -64,7 +64,21 @@ export default class FocusedPostConcept {
     if (post) {
       return post;
     }
-    throw new BadValuesError("Post with id {0} doesn't exist", _id);
+    throw new BadValuesError(`Post with id ${_id} doesn't exist`);
+  }
+
+  /**
+   * Get posts for challenges accepted today
+   * @returns posts accepted today
+   */
+  async getAcceptedToday() {
+    const category = await this.getCategoryByName("Challenge", "Daily creative challenges");
+
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date();
+
+    return await this.posts.readMany({ category: category._id, dateCreated: { $gte: start, $lt: end } });
   }
 
   /**
@@ -118,6 +132,19 @@ export default class FocusedPostConcept {
   }
 
   /**
+   * Finds all category objects
+   * @returns category objects
+   */
+  async getCategoryByName(name: string, description: string) {
+    let category = await this.categories.readOne({ name });
+    if (!category) {
+      const categoryId = await this.categories.createOne({ name, description });
+      category = await this.getCategory(categoryId);
+    }
+    return category;
+  }
+
+  /**
    * Gets the post if it exists and the requester is the poster
    * @param _id id of the post
    * @param user id of the requester
@@ -155,7 +182,7 @@ export default class FocusedPostConcept {
    */
   async deleteCategory(_id: ObjectId) {
     await this.categories.deleteOne({ _id });
-    await this.posts.deleteMany({ category: _id });
+    await this.posts.deleteMany({ category: _id.toString() });
     return { msg: "successfully deleted category and its posts" };
   }
 

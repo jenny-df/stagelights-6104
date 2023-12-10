@@ -29,6 +29,14 @@ export default class RestrictionConcept {
   }
 
   /**
+   * Checks if there is any admin
+   * @returns boolean representing whether there is an admin
+   */
+  async anyAdmins() {
+    return (await this.restrictions.readOne({ adminPages: true })) !== null;
+  }
+
+  /**
    * Checks if a given user is an admin
    * @param user id of user
    * @returns boolean representing whether the user is an admin or not
