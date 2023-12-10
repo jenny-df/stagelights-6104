@@ -181,8 +181,11 @@ export default class FocusedPostConcept {
    * @returns a success message
    */
   async deleteCategory(_id: ObjectId) {
+    const category = await this.categories.readOne({ _id });
+    if (category) {
+      await this.posts.deleteMany({ category: category._id });
+    }
     await this.categories.deleteOne({ _id });
-    await this.posts.deleteMany({ category: _id.toString() });
     return { msg: "successfully deleted category and its posts" };
   }
 
