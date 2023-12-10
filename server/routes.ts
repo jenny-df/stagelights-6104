@@ -720,15 +720,16 @@ class Routes {
   }
 
   @Router.post("/vote")
-  async upvote(session: WebSessionDoc, post: ObjectId, upvote: boolean) {
+  async upvote(session: WebSessionDoc, post: ObjectId, upvote: string) {
+    let upvotebool;
     if (upvote === "true") {
-      upvote = true;
+      upvotebool = true;
     } else {
-      upvote = false;
+      upvotebool = false;
     }
     const user = WebSession.getUser(session);
     const postAuthor = (await FocusedPost.getById(new ObjectId(post))).author; // verify post
-    const voteResponse = await Vote.vote(user, new ObjectId(post), upvote);
+    const voteResponse = await Vote.vote(user, new ObjectId(post), upvotebool);
     await Applause.update(postAuthor, voteResponse.applausePoints);
     return voteResponse;
   }
