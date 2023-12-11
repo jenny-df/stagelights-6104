@@ -489,7 +489,7 @@ class Routes {
 
   @Router.get("/portfolio/:userId")
   async getUserPortfolio(userId: ObjectId) {
-    return await Portfolio.getByUser(new ObjectId(userId));
+    return await Responses.portfolio(await Portfolio.getByUser(new ObjectId(userId)));
   }
 
   @Router.patch("/portfolio")
